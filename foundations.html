@@ -1,0 +1,776 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Foundations — Driving the Antec panel from Linux</title>
+<style>
+:root{
+  --bg:#F1F3F5; --surface:#FFFFFF; --surface-2:#E7EAEE; --sunken:#DDE1E7;
+  --text:#171B21; --dim:#5A626E; --faint:#858D99;
+  --line:#D2D7DE; --line-soft:#E3E7EC;
+  --accent:#B4741B; --accent-ink:#8A5810; --accent-wash:#F7EFE0;
+  --hdr:#5E7387; --cmd:#6A6398; --cpu:#B4741B; --gpu:#2C7169; --sum:#A03C36;
+  --ok:#2C7169; --warn:#A0632B; --bad:#A03C36;
+  --shadow:0 1px 2px rgba(20,25,32,.06), 0 8px 24px -12px rgba(20,25,32,.18);
+  --mono:ui-monospace,"SF Mono","JetBrains Mono","Fira Code","DejaVu Sans Mono",monospace;
+  --sans:system-ui,"Segoe UI",Roboto,"Noto Sans","DejaVu Sans",sans-serif;
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --bg:#0F1216; --surface:#161A20; --surface-2:#1D222A; --sunken:#0B0E12;
+    --text:#E3E7EC; --dim:#98A1AE; --faint:#6C7683;
+    --line:#282E37; --line-soft:#1F242C;
+    --accent:#D9A048; --accent-ink:#E8B76C; --accent-wash:#241E14;
+    --hdr:#8AA3BA; --cmd:#9A92CC; --cpu:#D9A048; --gpu:#5AAFA3; --sum:#D2726A;
+    --ok:#5AAFA3; --warn:#D09A54; --bad:#D2726A;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 30px -14px rgba(0,0,0,.7);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0F1216; --surface:#161A20; --surface-2:#1D222A; --sunken:#0B0E12;
+  --text:#E3E7EC; --dim:#98A1AE; --faint:#6C7683;
+  --line:#282E37; --line-soft:#1F242C;
+  --accent:#D9A048; --accent-ink:#E8B76C; --accent-wash:#241E14;
+  --hdr:#8AA3BA; --cmd:#9A92CC; --cpu:#D9A048; --gpu:#5AAFA3; --sum:#D2726A;
+  --ok:#5AAFA3; --warn:#D09A54; --bad:#D2726A;
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 30px -14px rgba(0,0,0,.7);
+}
+:root[data-theme="light"]{
+  --bg:#F1F3F5; --surface:#FFFFFF; --surface-2:#E7EAEE; --sunken:#DDE1E7;
+  --text:#171B21; --dim:#5A626E; --faint:#858D99;
+  --line:#D2D7DE; --line-soft:#E3E7EC;
+  --accent:#B4741B; --accent-ink:#8A5810; --accent-wash:#F7EFE0;
+  --hdr:#5E7387; --cmd:#6A6398; --cpu:#B4741B; --gpu:#2C7169; --sum:#A03C36;
+  --ok:#2C7169; --warn:#A0632B; --bad:#A03C36;
+  --shadow:0 1px 2px rgba(20,25,32,.06), 0 8px 24px -12px rgba(20,25,32,.18);
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:1.5rem}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{animation:none!important;transition:none!important}}
+body{
+  margin:0;background:var(--bg);color:var(--text);
+  font-family:var(--sans);font-size:16.5px;line-height:1.65;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1180px;margin:0 auto;padding:0 1.5rem 6rem;
+  display:grid;grid-template-columns:minmax(0,1fr);gap:0}
+@media (min-width:1000px){
+  .wrap{grid-template-columns:15.5rem minmax(0,1fr);gap:3.5rem;align-items:start}
+}
+/* ---------- masthead ---------- */
+.masthead{grid-column:1/-1;padding:3.5rem 0 2rem;border-bottom:1px solid var(--line)}
+.kicker{font-family:var(--mono);font-size:.72rem;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--accent-ink);margin:0 0 1rem}
+h1{font-family:var(--mono);font-size:clamp(1.9rem,4.2vw,2.9rem);line-height:1.1;
+  letter-spacing:-.02em;font-weight:600;margin:0 0 1rem;text-wrap:balance}
+.standfirst{font-size:1.12rem;color:var(--dim);max-width:60ch;margin:0}
+.masthead-meta{display:flex;flex-wrap:wrap;gap:.5rem;margin-top:1.75rem}
+.chip{font-family:var(--mono);font-size:.74rem;letter-spacing:.04em;
+  padding:.3rem .6rem;border:1px solid var(--line);border-radius:2px;
+  background:var(--surface);color:var(--dim)}
+.chip b{color:var(--text);font-weight:600}
+/* ---------- rail ---------- */
+.rail{position:sticky;top:1.5rem;padding:2.5rem 0;font-size:.9rem;display:none}
+@media (min-width:1000px){.rail{display:block}}
+.rail h2{font-family:var(--mono);font-size:.7rem;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--faint);margin:0 0 .9rem;font-weight:600}
+.rail ol{list-style:none;margin:0 0 2rem;padding:0;display:flex;flex-direction:column;gap:.1rem}
+.rail a{display:block;padding:.3rem .6rem;color:var(--dim);text-decoration:none;
+  border-left:2px solid var(--line-soft);line-height:1.4}
+.rail a:hover{color:var(--text);border-left-color:var(--accent);background:var(--surface)}
+.rail a:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.rail .num{font-family:var(--mono);font-size:.74rem;color:var(--faint);margin-right:.5rem}
+.nextlinks{display:flex;flex-direction:column;gap:.5rem}
+.nextlink{display:block;padding:.7rem .8rem;background:var(--surface);border:1px solid var(--line);
+  border-radius:3px;text-decoration:none;color:var(--text);border-left-width:3px}
+.nextlink:hover{border-color:var(--accent);box-shadow:var(--shadow)}
+.nextlink:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.nextlink .lang{font-family:var(--mono);font-weight:600;font-size:.9rem;display:block}
+.nextlink .sub{font-size:.78rem;color:var(--dim)}
+#go-link{border-left-color:#0092B5}
+#rust-link{border-left-color:#B3411F}
+/* ---------- main ---------- */
+main{padding:2.5rem 0;min-width:0}
+section{padding:2.5rem 0;border-bottom:1px solid var(--line-soft)}
+section:first-of-type{padding-top:1rem}
+h2{font-family:var(--mono);font-size:1.4rem;font-weight:600;letter-spacing:-.01em;
+  margin:0 0 .4rem;text-wrap:balance;scroll-margin-top:1.5rem}
+h2 .sec-num{color:var(--faint);font-weight:400;margin-right:.7rem}
+h3{font-family:var(--mono);font-size:1.02rem;font-weight:600;margin:2rem 0 .5rem;letter-spacing:-.005em}
+p{margin:0 0 1rem;max-width:68ch}
+ul,ol.body{max-width:66ch;padding-left:1.3rem;margin:0 0 1rem}
+li{margin-bottom:.45rem}
+a{color:var(--accent-ink);text-underline-offset:2px}
+a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+code{font-family:var(--mono);font-size:.87em;background:var(--surface-2);
+  padding:.1em .35em;border-radius:2px;word-break:break-word}
+strong{font-weight:650}
+.lede{font-size:1.05rem;color:var(--dim);max-width:64ch;margin-bottom:1.75rem}
+/* ---------- code ---------- */
+.codewrap{position:relative;margin:0 0 1.5rem}
+.codewrap .label{font-family:var(--mono);font-size:.68rem;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--faint);display:block;margin-bottom:.4rem}
+pre{margin:0;background:var(--sunken);border:1px solid var(--line);border-radius:3px;
+  padding:1rem 1.1rem;overflow-x:auto;font-family:var(--mono);font-size:.83rem;line-height:1.62}
+pre code{background:none;padding:0;font-size:inherit}
+.copy{position:absolute;top:1.6rem;right:.5rem;font-family:var(--mono);font-size:.68rem;
+  letter-spacing:.06em;text-transform:uppercase;background:var(--surface);color:var(--dim);
+  border:1px solid var(--line);border-radius:2px;padding:.25rem .5rem;cursor:pointer;opacity:0;
+  transition:opacity .12s}
+.codewrap:hover .copy,.copy:focus-visible{opacity:1}
+.copy:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.copy.done{color:var(--ok);border-color:var(--ok)}
+.tok-com{color:var(--faint);font-style:italic}
+.tok-str{color:var(--gpu)}
+.tok-num{color:var(--sum)}
+.tok-kw{color:var(--cmd);font-weight:600}
+.tok-mac{color:var(--accent-ink)}
+.tok-typ{color:var(--hdr)}
+/* ---------- callouts ---------- */
+.call{border:1px solid var(--line);border-left-width:3px;background:var(--surface);
+  border-radius:3px;padding:1rem 1.15rem;margin:0 0 1.5rem;max-width:70ch}
+.call > :last-child{margin-bottom:0}
+.call .tag{font-family:var(--mono);font-size:.68rem;letter-spacing:.13em;text-transform:uppercase;
+  font-weight:600;display:block;margin-bottom:.4rem}
+.call.gotcha{border-left-color:var(--bad)} .call.gotcha .tag{color:var(--bad)}
+.call.why{border-left-color:var(--hdr)} .call.why .tag{color:var(--hdr)}
+.call.check{border-left-color:var(--ok)} .call.check .tag{color:var(--ok)}
+.call.reach{border-left-color:var(--accent)} .call.reach .tag{color:var(--accent-ink)}
+.call.wrong{border-left-color:var(--warn)} .call.wrong .tag{color:var(--warn)}
+/* ---------- tables ---------- */
+.tablewrap{overflow-x:auto;margin:0 0 1.5rem;border:1px solid var(--line);border-radius:3px}
+table{border-collapse:collapse;width:100%;font-size:.88rem;background:var(--surface)}
+th,td{text-align:left;padding:.55rem .8rem;border-bottom:1px solid var(--line-soft);vertical-align:top}
+th{font-family:var(--mono);font-size:.7rem;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--faint);font-weight:600;background:var(--surface-2);white-space:nowrap}
+tr:last-child td{border-bottom:none}
+td code{background:none;padding:0}
+.mono-col{font-family:var(--mono);white-space:nowrap;font-variant-numeric:tabular-nums}
+/* ---------- byte diagram ---------- */
+.bytemap{margin:0 0 .75rem;overflow-x:auto;padding-bottom:.3rem}
+.bytemap-row{display:grid;grid-template-columns:repeat(12,minmax(3.1rem,1fr));gap:3px;min-width:40rem}
+.byte{background:var(--surface);border:1px solid var(--line);border-top-width:3px;
+  border-radius:2px;padding:.5rem .2rem .4rem;text-align:center;font-family:var(--mono)}
+.byte .hex{display:block;font-size:.95rem;font-weight:600;letter-spacing:.02em}
+.byte .off{display:block;font-size:.64rem;color:var(--faint);margin-top:.2rem}
+.byte.r-hdr{border-top-color:var(--hdr)} .byte.r-hdr .hex{color:var(--hdr)}
+.byte.r-cmd{border-top-color:var(--cmd)} .byte.r-cmd .hex{color:var(--cmd)}
+.byte.r-cpu{border-top-color:var(--cpu)} .byte.r-cpu .hex{color:var(--cpu)}
+.byte.r-gpu{border-top-color:var(--gpu)} .byte.r-gpu .hex{color:var(--gpu)}
+.byte.r-sum{border-top-color:var(--sum)} .byte.r-sum .hex{color:var(--sum)}
+.legend{display:flex;flex-wrap:wrap;gap:.4rem 1.2rem;font-family:var(--mono);font-size:.75rem;
+  color:var(--dim);margin-bottom:1.5rem}
+.legend span{display:flex;align-items:center;gap:.4rem}
+.legend i{width:.7rem;height:.7rem;border-radius:1px;display:inline-block}
+/* ---------- details ---------- */
+details{border:1px solid var(--line);border-radius:3px;background:var(--surface);
+  margin:0 0 1.5rem;overflow:hidden}
+details > summary{cursor:pointer;padding:.7rem 1rem;font-family:var(--mono);font-size:.8rem;
+  letter-spacing:.03em;color:var(--dim);list-style:none;user-select:none}
+details > summary::-webkit-details-marker{display:none}
+details > summary::before{content:"▸ ";color:var(--accent)}
+details[open] > summary::before{content:"▾ "}
+details[open] > summary{border-bottom:1px solid var(--line-soft);color:var(--text)}
+details > summary:hover{color:var(--text);background:var(--surface-2)}
+details > summary:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.details-body{padding:1rem 1.1rem .3rem}
+.details-body > .codewrap:last-child{margin-bottom:1rem}
+/* ---------- misc ---------- */
+.theme-toggle{position:fixed;top:1rem;right:1rem;z-index:10;font-family:var(--mono);
+  font-size:.7rem;letter-spacing:.1em;text-transform:uppercase;background:var(--surface);
+  color:var(--dim);border:1px solid var(--line);border-radius:2px;padding:.4rem .7rem;cursor:pointer}
+.theme-toggle:hover{color:var(--text);border-color:var(--accent)}
+.theme-toggle:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.pillrow{display:flex;flex-wrap:wrap;gap:.4rem;margin:0 0 1.5rem}
+.pill{font-family:var(--mono);font-size:.74rem;padding:.25rem .55rem;border-radius:2px;
+  background:var(--surface-2);color:var(--dim);border:1px solid var(--line-soft)}
+.footer{grid-column:1/-1;padding:3rem 0 0;color:var(--faint);font-size:.85rem;
+  border-top:1px solid var(--line);margin-top:2rem}
+.mobile-next{display:grid;gap:.6rem;margin:2rem 0 0}
+@media (min-width:1000px){.mobile-next{display:none}}
+</style>
+</head>
+<body>
+<button class="theme-toggle" id="themeToggle" type="button">Theme</button>
+
+<div class="wrap">
+
+<header class="masthead">
+  <p class="kicker">Antec Performance 1 FT · Linux</p>
+  <h1>Driving the case panel</h1>
+  <p class="standfirst">Antec ships iUnity for Windows only. The panel underneath it is a plain
+  USB HID device that the kernel already hands you as a file. This page is everything true about
+  the hardware and the protocol — read it once, then build the daemon in Go or in Rust.</p>
+  <div class="masthead-meta">
+    <span class="chip"><b>2022:0522</b> DINK_HID_DEVICE</span>
+    <span class="chip">12-byte packet</span>
+    <span class="chip">no USB library</span>
+    <span class="chip">no kernel module</span>
+  </div>
+</header>
+
+<nav class="rail" aria-label="Contents">
+  <h2>Foundations</h2>
+  <ol>
+    <li><a href="#hardware"><span class="num">01</span>The hardware</a></li>
+    <li><a href="#hidraw"><span class="num">02</span>Why hidraw, not libusb</a></li>
+    <li><a href="#descriptor"><span class="num">03</span>The report descriptor</a></li>
+    <li><a href="#protocol"><span class="num">04</span>The protocol</a></li>
+    <li><a href="#writerules"><span class="num">05</span>Two rules for writing</a></li>
+    <li><a href="#warmup"><span class="num">06</span>Warm-up: no code</a></li>
+    <li><a href="#hwmon"><span class="num">07</span>Reading temperatures</a></li>
+    <li><a href="#sensors"><span class="num">08</span>Picking the right sensors</a></li>
+    <li><a href="#perms"><span class="num">09</span>Permissions</a></li>
+    <li><a href="#debug"><span class="num">10</span>Debugging toolkit</a></li>
+    <li><a href="#design"><span class="num">11</span>What you're building</a></li>
+  </ol>
+  <h2>Then pick a language</h2>
+  <div class="nextlinks">
+    <a class="nextlink" id="go-link" href="go.html">
+      <span class="lang">Go</span><span class="sub">Assumes you know some Go</span></a>
+    <a class="nextlink" id="rust-link" href="rust.html">
+      <span class="lang">Rust</span><span class="sub">Assumes you know none</span></a>
+  </div>
+</nav>
+
+<main>
+
+<section id="hardware">
+  <h2><span class="sec-num">01</span>What the panel actually is</h2>
+  <p class="lede">Not a driver project. Not a USB project, really. A file-writing project.</p>
+
+  <p>The temperature readout on the top I/O of the Performance 1 FT is a small display module
+  wired to an internal USB 2.0 header on your motherboard. It enumerates as an ordinary
+  USB HID device, and the kernel binds its generic HID driver to it automatically at boot.
+  Nothing needs installing for it to appear:</p>
+
+  <div class="codewrap"><span class="label">lsusb</span>
+<pre><code>Bus 001 Device 002: ID 2022:0522 DINK_HID_DEVICE DINK_HID_DEVICE</code></pre></div>
+
+  <p>&ldquo;DINK&rdquo; is the display controller vendor, not Antec — the same module shows up in
+  the Antec Flux Pro and a few other cases, which is why the protocol was already public
+  before either of us looked at it. The full descriptor is worth a glance:</p>
+
+  <div class="codewrap"><span class="label">lsusb -v -d 2022:0522 (abridged)</span>
+<pre><code>bcdUSB               1.01
+bDeviceClass            0
+iSerial                 3 2015-03-21
+  Interface Descriptor:
+    bInterfaceClass       3 Human Interface Device
+    bInterfaceSubClass    0
+    bNumEndpoints         2
+  Endpoint Descriptor:
+    bEndpointAddress   0x81  EP 1 IN     Interrupt   64 bytes
+  Endpoint Descriptor:
+    bEndpointAddress   0x02  EP 2 OUT    Interrupt   64 bytes</code></pre></div>
+
+  <p>Two interrupt endpoints, 64 bytes each. You will only ever use the OUT one. There is no
+  configuration to negotiate, no handshake, no initialisation sequence — the device is ready
+  the moment it enumerates, and it forgets everything the moment you stop writing to it.</p>
+
+  <div class="call check"><span class="tag">Nothing here is fragile</span>
+  <p>The worst outcome of a malformed packet is a garbled or frozen readout, fixed by sending a
+  correct packet or replugging the header. There is no writable firmware, no EEPROM, and no
+  bootloader on this device. Experiment freely.</p></div>
+</section>
+
+<section id="hidraw">
+  <h2><span class="sec-num">02</span>Why hidraw, and not libusb</h2>
+
+  <p>Search for &ldquo;USB HID from Go&rdquo; or &ldquo;USB HID from Rust&rdquo; and every result
+  points at a libusb binding — <code>gousb</code>, <code>rusb</code>, <code>hidapi</code>,
+  <code>pyusb</code>. Several of the existing Antec projects on GitHub are built that way.
+  It works, and it is the wrong path here.</p>
+
+  <p>Because the kernel has already claimed this device with <code>hid-generic</code>, libusb
+  cannot simply talk to it. You must first <em>detach the kernel driver</em> from the interface.
+  That costs you three things: a C toolchain and <code>libusb</code>/<code>libudev</code> headers
+  at build time, root at runtime, and — the one that actually matters — the physical toggle
+  button on your case's top I/O, which stops working while the interface is detached.</p>
+
+  <p>Meanwhile the kernel is already exposing the device as a character device you can open
+  and write to like any other file:</p>
+
+  <div class="codewrap"><span class="label">shell</span>
+<pre><code>$ ls -l /dev/hidraw0
+crw------- 1 root root 243, 0 Aug  6 21:42 /dev/hidraw0</code></pre></div>
+
+  <div class="call why"><span class="tag">The rule</span>
+  <p>If the kernel already gives you a file, use the file. Every language on earth can open a
+  file and write bytes to it, which is exactly why this project has a zero-dependency solution
+  in both Go and Rust.</p></div>
+</section>
+
+<section id="descriptor">
+  <h2><span class="sec-num">03</span>Reading the report descriptor</h2>
+
+  <p>Two facts about the write path get asserted constantly and explained rarely: the report is
+  64 bytes, and you must prefix your write with a zero byte. Both come straight out of the
+  device's HID report descriptor, which you can read without any tooling:</p>
+
+  <div class="codewrap"><span class="label">shell</span>
+<pre><code>$ sudo hexdump -C /sys/class/hidraw/hidraw0/device/report_descriptor
+00000000  06 a0 ff 09 01 a1 01 09  02 a1 00 06 a1 ff 09 03
+00000010  09 04 15 80 25 7f 35 00  45 ff 75 08 95 40 81 02
+00000020  09 05 09 06 15 80 25 7f  35 00 45 ff 75 08 95 40
+00000030  81 02 09 05 09 06 15 80  25 7f 35 00 45 ff 75 08
+00000040  95 40 91 02 c0 c0</code></pre></div>
+
+  <p>Seventy bytes. HID descriptors are a flat stream of items, each a one-byte tag followed by
+  its data. Decoded, with the parts that matter to us highlighted:</p>
+
+  <div class="tablewrap"><table>
+    <thead><tr><th>Bytes</th><th>Item</th><th>Meaning</th></tr></thead>
+    <tbody>
+      <tr><td class="mono-col">06 A0 FF</td><td>Usage Page</td><td>Vendor-defined <code>0xFFA0</code> — no standard semantics, so no kernel driver will try to interpret our reports as a keyboard or mouse</td></tr>
+      <tr><td class="mono-col">09 01 / A1 01</td><td>Usage, Collection</td><td>Application collection opens</td></tr>
+      <tr><td class="mono-col">09 02 / A1 00</td><td>Usage, Collection</td><td>Physical collection opens</td></tr>
+      <tr><td class="mono-col">75 08</td><td>Report Size</td><td>8 bits per field</td></tr>
+      <tr><td class="mono-col">95 40</td><td>Report Count</td><td><strong>64 fields</strong> — so 64 × 8 bits = 64 bytes per report</td></tr>
+      <tr><td class="mono-col">81 02</td><td>Input</td><td>An IN report, device → host. Appears twice. You never read these.</td></tr>
+      <tr><td class="mono-col">91 02</td><td><strong>Output</strong></td><td><strong>An OUT report, host → device.</strong> This is the one you write. 64 bytes, from the Report Size and Report Count above it.</td></tr>
+      <tr><td class="mono-col">C0 C0</td><td>End Collection ×2</td><td>Done</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="call why"><span class="tag">Where the zero byte comes from</span>
+  <p>Notice what is <em>not</em> in those 70 bytes: any <code>0x85</code> item, which is the tag
+  for Report ID. This device declares no report IDs at all.</p>
+  <p>The <code>hidraw</code> write interface always treats the first byte of your buffer as a
+  report ID. When a device has none, the kernel requires that byte to be <code>0x00</code> and
+  strips it before the report goes on the wire. So a 12-byte packet becomes a 13-byte
+  <code>write()</code>, and the leading zero never reaches the display.</p></div>
+</section>
+
+<section id="protocol">
+  <h2><span class="sec-num">04</span>The protocol</h2>
+
+  <p class="lede">Twelve bytes, sent about once a second. That is the entire protocol.</p>
+
+  <p>Here is a real packet — CPU at 44.3&nbsp;°C, GPU at 42.0&nbsp;°C — with each byte coloured
+  by its role:</p>
+
+  <div class="bytemap"><div class="bytemap-row">
+    <div class="byte r-hdr"><span class="hex">55</span><span class="off">0</span></div>
+    <div class="byte r-hdr"><span class="hex">AA</span><span class="off">1</span></div>
+    <div class="byte r-cmd"><span class="hex">01</span><span class="off">2</span></div>
+    <div class="byte r-cmd"><span class="hex">01</span><span class="off">3</span></div>
+    <div class="byte r-cmd"><span class="hex">06</span><span class="off">4</span></div>
+    <div class="byte r-cpu"><span class="hex">04</span><span class="off">5</span></div>
+    <div class="byte r-cpu"><span class="hex">04</span><span class="off">6</span></div>
+    <div class="byte r-cpu"><span class="hex">03</span><span class="off">7</span></div>
+    <div class="byte r-gpu"><span class="hex">04</span><span class="off">8</span></div>
+    <div class="byte r-gpu"><span class="hex">02</span><span class="off">9</span></div>
+    <div class="byte r-gpu"><span class="hex">00</span><span class="off">10</span></div>
+    <div class="byte r-sum"><span class="hex">18</span><span class="off">11</span></div>
+  </div></div>
+  <div class="legend">
+    <span><i style="background:var(--hdr)"></i>header</span>
+    <span><i style="background:var(--cmd)"></i>command</span>
+    <span><i style="background:var(--cpu)"></i>CPU · tens, ones, tenths</span>
+    <span><i style="background:var(--gpu)"></i>GPU · tens, ones, tenths</span>
+    <span><i style="background:var(--sum)"></i>checksum</span>
+  </div>
+
+  <div class="tablewrap"><table>
+    <thead><tr><th>Offset</th><th>Role</th><th>Value</th></tr></thead>
+    <tbody>
+      <tr><td class="mono-col">0–1</td><td>Header</td><td>Always <code>0x55 0xAA</code></td></tr>
+      <tr><td class="mono-col">2–4</td><td>Command</td><td>Always <code>0x01 0x01 0x06</code></td></tr>
+      <tr><td class="mono-col">5–7</td><td>CPU temperature</td><td>Tens, ones, tenths digit — each <code>0x00</code>–<code>0x09</code></td></tr>
+      <tr><td class="mono-col">8–10</td><td>GPU temperature</td><td>Same encoding</td></tr>
+      <tr><td class="mono-col">11</td><td>Checksum</td><td><code>sum(bytes 0..10) &amp; 0xFF</code></td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>Digits are values, not characters</h3>
+  <p>44.3&nbsp;°C encodes as <code>0x04 0x04 0x03</code>. Not <code>'4' '4' '3'</code>, which
+  would be <code>0x34 0x34 0x33</code>. The display wants the numeric value of each digit and
+  drives its segments from that directly. This trips people up because every other text-ish
+  protocol they have met works the other way.</p>
+
+  <h3>Blanking</h3>
+  <p>Sending <code>0xEE 0xEE 0xEE</code> in place of a digit triple blanks that half of the panel
+  to <code>--.-</code>. Useful in three situations: a sensor you could not find, a reading that
+  failed this tick, and shutdown — so the panel does not freeze forever on whatever number
+  happened to be there when your process died.</p>
+
+  <h3>Two test vectors</h3>
+  <p>Keep these. They are the anchor for every checkpoint in both tutorials, and you can verify
+  both by hand in about a minute.</p>
+
+  <div class="codewrap"><span class="label">known-good packets</span>
+<pre><code>44.3 °C / 42.0 °C   ->  55 AA 01 01 06  04 04 03  04 02 00  18
+blank   / blank     ->  55 AA 01 01 06  EE EE EE  EE EE EE  9B</code></pre></div>
+
+  <div class="call gotcha"><span class="tag">Gotcha · the checksum overflows immediately</span>
+  <p><code>0x55 + 0xAA + 0x01 = 0x100</code>. The accumulator exceeds a single byte on the
+  <em>third byte of every packet</em>, before any temperature data is involved.</p>
+  <p>This has opposite consequences in the two languages, and both tutorials return to it:
+  Go wraps silently and quietly gives you the right answer; Rust panics in a debug build and
+  wraps correctly in a release build, which presents as &ldquo;my program only crashes when
+  I'm developing&rdquo;. Accumulate in a wider integer type and narrow once at the end.</p></div>
+
+  <h3>What is not in the protocol</h3>
+  <p>The packet always carries both temperatures. The button on your top I/O chooses which one
+  the panel shows, and it does that entirely inside the display module — your program never
+  sees the button press and cannot read or set its state. There is also no brightness control,
+  no colour, no text mode, and no acknowledgement of any kind. iUnity's richer layouts use a
+  second, undocumented protocol that nobody has reverse engineered.</p>
+</section>
+
+<section id="writerules">
+  <h2><span class="sec-num">05</span>Two rules for writing</h2>
+
+  <p>Everything else in both tutorials is ordinary programming. These two rules are the only
+  places where being casual will produce a bug you cannot reason about from the symptom.</p>
+
+  <h3>Rule one — prefix the report ID byte</h3>
+  <p>Your buffer is 13 bytes: a <code>0x00</code>, then the 12-byte packet. Section 03 explains
+  why. Get this wrong and the display receives <code>55 AA 01 01 06 …</code> shifted by one
+  position, fails its own header check, and shows nothing at all — no error, no clue.</p>
+
+  <h3>Rule two — one buffer, one write() syscall</h3>
+  <p><code>hidraw</code> maps each <code>write()</code> syscall onto exactly one HID report.
+  Two syscalls are two reports, both malformed. This makes buffered writers actively harmful
+  here, which is counterintuitive: wrapping a file in a buffer is normally free performance.</p>
+
+  <div class="call wrong"><span class="tag">Reaching for the wrong tool</span>
+  <p><code>bufio.Writer</code> in Go, <code>BufWriter</code> in Rust, <code>fmt.Fprintf</code>
+  or <code>write!()</code> called once per field — all of these can split your report across
+  syscalls or hold it until an explicit flush. Build the whole 13-byte buffer in memory, then
+  hand it to a single <code>write_all</code>/<code>Write</code> call.</p></div>
+
+  <div class="call check"><span class="tag">How to prove you got it right</span>
+  <p><code>strace -e trace=write ./your-program</code> should show exactly one
+  <code>write(3, ..., 13) = 13</code> per second. Seeing the syscall directly is far more
+  convincing than seeing the right number on the panel, because a torn report can still
+  occasionally look correct.</p></div>
+</section>
+
+<section id="warmup">
+  <h2><span class="sec-num">06</span>Warm-up: light up the panel with no code at all</h2>
+
+  <p class="lede">Do this before you write a line of Go or Rust. It takes thirty seconds and it
+  will save you an evening.</p>
+
+  <p>You have a test vector and you know the write rules, so you already have everything needed
+  to drive the display from a shell. Paste the 44.3/42.0 packet, with its leading zero:</p>
+
+  <div class="codewrap"><span class="label">shell</span>
+<pre><code>printf '\x00\x55\xaa\x01\x01\x06\x04\x04\x03\x04\x02\x00\x18' \
+  | sudo dd of=/dev/hidraw0 bs=13 count=1</code></pre></div>
+
+  <p>The panel should read <code>44.3</code>. (It will keep reading that until something else
+  writes to it — nothing is refreshing it.) Blank it again with the second vector:</p>
+
+  <div class="codewrap"><span class="label">shell</span>
+<pre><code>printf '\x00\x55\xaa\x01\x01\x06\xee\xee\xee\xee\xee\xee\x9b' \
+  | sudo dd of=/dev/hidraw0 bs=13 count=1</code></pre></div>
+
+  <div class="call why"><span class="tag">Why bother</span>
+  <p>From here on, every failure has two possible causes: your program is wrong, or your
+  understanding of the device is wrong. This one command permanently eliminates the second
+  one. If the panel lit up, the device works, the node is right, and your permissions are
+  fine — so any later problem is in your code, and you can stop second-guessing the hardware.</p>
+  <p><code>bs=13 count=1</code> is not decoration. It forces <code>dd</code> to issue a single
+  13-byte write, which is rule two enforced by the tool.</p></div>
+
+  <p>If it did not light up, resolve that now rather than after you have written 200 lines.
+  Check the node is really yours (<a href="#debug">section 10</a>) and that you used
+  <code>sudo</code> — <code>/dev/hidraw0</code> is root-only until you install a udev rule.</p>
+</section>
+
+<section id="hwmon">
+  <h2><span class="sec-num">07</span>Reading temperatures</h2>
+
+  <p>Linux exposes every temperature sensor it knows about under <code>/sys/class/hwmon/</code>
+  as small text files. No library, no daemon, no <code>lm_sensors</code> dependency — just
+  reads. You do not need NVML for an NVIDIA card or ROCm for an AMD one; both drivers publish
+  through hwmon.</p>
+
+  <div class="codewrap"><span class="label">shell</span>
+<pre><code>$ for d in /sys/class/hwmon/hwmon*; do echo "$d  $(cat $d/name)"; done
+/sys/class/hwmon/hwmon0  nvme
+/sys/class/hwmon/hwmon1  nvme
+/sys/class/hwmon/hwmon2  amdgpu
+/sys/class/hwmon/hwmon3  amdgpu
+/sys/class/hwmon/hwmon4  k10temp
+/sys/class/hwmon/hwmon5  spd5118
+/sys/class/hwmon/hwmon6  r8169_0_900:00
+/sys/class/hwmon/hwmon7  spd5118
+/sys/class/hwmon/hwmon8  ath12k_hwmon</code></pre></div>
+
+  <p>Inside each directory: a <code>name</code> file holding the driver name, one or more
+  <code>tempN_input</code> files holding <strong>millidegrees Celsius</strong> as text, and
+  optionally a matching <code>tempN_label</code> naming the sensor.</p>
+
+  <div class="codewrap"><span class="label">shell</span>
+<pre><code>$ cat /sys/class/hwmon/hwmon4/name
+k10temp
+$ cat /sys/class/hwmon/hwmon4/temp1_input
+47125
+$ cat /sys/class/hwmon/hwmon4/temp1_label
+Tctl</code></pre></div>
+
+  <p>So <code>47125</code> means 47.1&nbsp;°C. Four things about these files will bite you, and
+  all four are load-bearing in both tutorials:</p>
+
+  <div class="call gotcha"><span class="tag">Gotcha · everything ends in a newline</span>
+  <p>The files really contain <code>k10temp\n</code> and <code>47125\n</code> — verified with
+  <code>od -c</code>. Parsing <code>"47125\n"</code> as an integer fails in both languages, with
+  an error message that says nothing about whitespace. Worse, comparing <code>"k10temp\n"</code>
+  against <code>"k10temp"</code> fails <em>silently</em>: you simply find no sensors, with no
+  error to trace.</p>
+  <p>Trim on read. Every sysfs read, immediately, before anything else touches the string.</p></div>
+
+  <div class="call gotcha"><span class="tag">Gotcha · the numbering has holes</span>
+  <p><code>k10temp</code> on this machine exposes <code>temp1</code>, <code>temp3</code> and
+  <code>temp4</code>. There is no <code>temp2</code>. Any loop of the form
+  <code>for i in 1..=count</code> will either miss sensors or try to read files that do not
+  exist. Enumerate the directory; never count.</p></div>
+
+  <div class="call gotcha"><span class="tag">Gotcha · labels are optional</span>
+  <p><code>spd5118</code>, <code>r8169</code> and <code>ath12k_hwmon</code> have no
+  <code>tempN_label</code> files at all. A missing label is normal, not an error — model it as
+  an optional value, and never let its absence abort a scan.</p></div>
+
+  <div class="call gotcha"><span class="tag">Gotcha · every entry is a symlink</span>
+  <p>This is the nastiest one, because it fails silently and the compiler is happy.</p>
+  <p><code>/sys/class/hwmon/hwmon4</code> is a symlink into the real device tree under
+  <code>/sys/devices/…</code>, and so is every entry under <code>/sys/class/hidraw/</code>.
+  Directory-iteration APIs in both Go and Rust report the type of the <em>link</em>, not its
+  target, so a filter like &ldquo;only descend into directories&rdquo; matches nothing at all.
+  You get an empty result set, no error, and no hint about why.</p></div>
+
+  <p>One more, which you will only notice after a reboot: hwmon numbering is assigned in
+  driver-probe order and is <strong>not stable</strong>. Today's <code>hwmon4</code> is
+  tomorrow's <code>hwmon2</code>. Hardcoding a path is fine while you are getting a first
+  reading on screen; shipping it is a bug that surfaces weeks later. Both tutorials have you
+  hardcode first and then break it deliberately.</p>
+</section>
+
+<section id="sensors">
+  <h2><span class="sec-num">08</span>Picking the right sensors</h2>
+
+  <p>Two halves of the panel, so two sensors. You want to select them by driver name and label
+  rather than by path.</p>
+
+  <div class="tablewrap"><table>
+    <thead><tr><th>Half</th><th>Driver</th><th>Preferred label</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>CPU · AMD</td><td class="mono-col">k10temp</td><td class="mono-col">Tctl</td><td>Also exposes per-CCD <code>Tccd1</code>/<code>Tccd2</code>, which read lower and are not what you want on the panel</td></tr>
+      <tr><td>CPU · Intel</td><td class="mono-col">coretemp</td><td class="mono-col">Package id 0</td><td>Per-core sensors sit alongside it</td></tr>
+      <tr><td>GPU · AMD</td><td class="mono-col">amdgpu</td><td class="mono-col">edge</td><td><code>junction</code> is the hotspot and reads considerably higher</td></tr>
+      <tr><td>GPU · NVIDIA</td><td class="mono-col">nvidia</td><td class="mono-col">—</td><td>Single input; no NVML needed</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>The two-amdgpu problem</h3>
+  <p>A Ryzen desktop chip with integrated graphics plus a discrete card gives you
+  <strong>two <code>amdgpu</code> hwmon instances</strong>, and picking the wrong one puts your
+  iGPU's idle temperature on the panel forever. On this machine:</p>
+
+  <div class="tablewrap"><table>
+    <thead><tr><th>Path</th><th>Inputs</th><th>Labels</th><th>Which</th></tr></thead>
+    <tbody>
+      <tr><td class="mono-col">hwmon2</td><td class="mono-col">temp1, temp2, temp3</td><td class="mono-col">edge, junction, mem</td><td><strong>Discrete RX 9070</strong> — what you want</td></tr>
+      <tr><td class="mono-col">hwmon3</td><td class="mono-col">temp1</td><td class="mono-col">edge</td><td>Granite Ridge iGPU</td></tr>
+    </tbody>
+  </table></div>
+
+  <p>The cheap, reliable heuristic: a discrete card reports edge <em>and</em> junction
+  <em>and</em> memory, an integrated one reports only edge. Pick the instance with the most
+  temperature inputs. It is a heuristic rather than a guarantee, so print what you chose at
+  startup — one line in the log turns a mystery into a one-second diagnosis.</p>
+
+  <div class="call why"><span class="tag">Design note · a missing sensor is not an error</span>
+  <p>If you cannot find a GPU, do not abort. Send <code>0xEE 0xEE 0xEE</code> for that half and
+  keep going — half a working panel beats a service that refuses to start. The same applies to
+  a read that fails on one tick: blank it, log it, carry on.</p></div>
+</section>
+
+<section id="perms">
+  <h2><span class="sec-num">09</span>Permissions</h2>
+
+  <p><code>/dev/hidraw0</code> is <code>crw------- root root</code>. Your options, in order of
+  how much you should like them:</p>
+
+  <p><strong>A udev rule</strong>, so your normal user can write to the node while developing.
+  <code>uaccess</code> hands the device to whoever is logged in at the local seat, which is the
+  same mechanism your webcam and joystick use:</p>
+
+  <div class="codewrap"><span class="label">/etc/udev/rules.d/99-antec-display.rules</span>
+<pre><code>KERNEL=="hidraw*", ATTRS{idVendor}=="2022", ATTRS{idProduct}=="0522", \
+  TAG+="uaccess", MODE="0660", GROUP="input"</code></pre></div>
+
+  <div class="codewrap"><span class="label">shell</span>
+<pre><code>sudo udevadm control --reload-rules
+sudo udevadm trigger --subsystem-match=hidraw
+ls -l /dev/hidraw0    # should now show your user via an ACL: crw-rw----+</code></pre></div>
+
+  <p><strong>Run as root under systemd.</strong> For the shipped service this is fine and is what
+  the existing Python daemon does — the process reads a handful of sysfs files and writes one
+  device node, and the unit file locks down everything else.</p>
+
+  <p><strong><code>sudo ./your-program</code> while developing.</strong> Works, but you will get
+  tired of it, and running a compiler's output as root on every iteration is a habit worth not
+  forming. Install the udev rule.</p>
+
+  <div class="call gotcha"><span class="tag">Gotcha · permission errors look like bugs</span>
+  <p>The first time you point your program at the real device you are quite likely to get a
+  permission error, and the temptation is to assume your open flags are wrong. They are not.
+  Check <code>ls -l</code> first.</p></div>
+</section>
+
+<section id="debug">
+  <h2><span class="sec-num">10</span>Debugging toolkit</h2>
+
+  <p>Six commands cover essentially every problem you will hit. Learn them before you need them.</p>
+
+  <div class="tablewrap"><table>
+    <thead><tr><th>Command</th><th>Answers</th></tr></thead>
+    <tbody>
+      <tr><td class="mono-col">grep -l 0003:00002022:00000522 /sys/class/hidraw/*/device/uevent</td><td>Which hidraw node is mine, right now? This is the ground truth your program's discovery code must agree with.</td></tr>
+      <tr><td class="mono-col">hexdump -C out.bin</td><td>Did I build the bytes I think I built? Write to a scratch file instead of the device and look.</td></tr>
+      <tr><td class="mono-col">wc -c out.bin</td><td>Exactly 13? 0 means an unflushed buffer; 14 means a stray newline.</td></tr>
+      <tr><td class="mono-col">strace -e trace=write ./prog</td><td>One <code>write(3, ..., 13) = 13</code> per tick, or did my report get torn in two?</td></tr>
+      <tr><td class="mono-col">watch -n1 sensors</td><td>Is the number on the panel the number the kernel reports?</td></tr>
+      <tr><td class="mono-col">journalctl -u antec-display -f</td><td>What did the service say? Plain stdout/stderr lands here with no logging library.</td></tr>
+    </tbody>
+  </table></div>
+
+  <p>That first one deserves a closer look, because it is the exact string your discovery code
+  will search for and the single most likely thing to silently not match:</p>
+
+  <div class="codewrap"><span class="label">shell</span>
+<pre><code>$ cat /sys/class/hidraw/hidraw0/device/uevent
+DRIVER=hid-generic
+HID_ID=0003:00002022:00000522
+HID_NAME=DINK_HID_DEVICE DINK_HID_DEVICE
+HID_PHYS=usb-0000:13:00.0-7/input0
+HID_UNIQ=2015-03-21</code></pre></div>
+
+  <div class="call gotcha"><span class="tag">Gotcha · the ID fields are zero-padded to eight digits</span>
+  <p><code>HID_ID</code> is <code>bus:vendor:product</code>, and the vendor and product fields
+  are padded to <strong>eight</strong> hex digits — not four. Searching for
+  <code>"2022:0522"</code> matches nothing. You want <code>":00002022:00000522"</code>.</p>
+  <p>This exact bug shipped in the first draft of the Python version in this repo. It fails with
+  no error: discovery just quietly finds nothing.</p></div>
+
+  <p>Note that there are fifteen <code>hidraw</code> nodes on this machine, three of them
+  identical Logitech receivers and three identical DOIO keyboards. Scanning for your device by
+  ID is not a theoretical nicety; the numbering genuinely moves.</p>
+</section>
+
+<section id="design">
+  <h2><span class="sec-num">11</span>What you're building</h2>
+
+  <p class="lede">Both tutorials build the same program in the same order, so you can read one
+  against the other.</p>
+
+  <p>The shape is three phases: discover the device and the sensors once at startup, loop
+  forever (read, encode, write, sleep), and shut down cleanly. Deliberately, the tutorials do
+  not build it in that order — they start with the pure encoding logic, which needs no I/O and
+  no hardware, and work outward to the messy edges. That is both easier to learn and the
+  structure you would want in the finished program anyway.</p>
+
+  <div class="tablewrap"><table>
+    <thead><tr><th>#</th><th>Step</th><th>Why it's here</th></tr></thead>
+    <tbody>
+      <tr><td class="mono-col">1</td><td>The packet builder</td><td>Pure functions, fully testable against the two vectors, no device needed</td></tr>
+      <tr><td class="mono-col">2</td><td>Read one temperature</td><td>Hardcoded path. First file I/O, first error handling</td></tr>
+      <tr><td class="mono-col">3</td><td>Find the sensors</td><td>Directory scanning; the symlink and newline traps land here</td></tr>
+      <tr><td class="mono-col">4</td><td>Pick the right GPU</td><td>Small, verifiable, and the one place iterators are obviously the right tool</td></tr>
+      <tr><td class="mono-col">5</td><td>Find the device, write to it</td><td>First light from your own code</td></tr>
+      <tr><td class="mono-col">6</td><td>The loop</td><td>Now it's a program rather than a script</td></tr>
+      <tr><td class="mono-col">7</td><td>Survive a replug</td><td>Reopen on error instead of dying; keeps state, so it's where structs earn their place</td></tr>
+      <tr><td class="mono-col">8</td><td>Graceful shutdown</td><td>Blank the panel on the way out. Where Go and Rust diverge hardest</td></tr>
+      <tr><td class="mono-col">9</td><td>Ship it</td><td>Release build, udev rule, systemd unit, survives a reboot</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>Decisions worth making once</h3>
+  <ul>
+    <li><strong>Clamp before you encode.</strong> A three-digit temperature has nowhere to go in
+    a three-digit field. Clamp to 0–99.9&nbsp;°C, and be aware that narrowing casts behave
+    differently for floats and integers in both languages.</li>
+    <li><strong>Keep the file descriptor open.</strong> Reopening every second works and is a
+    syscall storm that also hides the unplug case instead of handling it. Open once, reopen
+    only on error.</li>
+    <li><strong>Do not assume the node number survives a replug.</strong> On reconnect, re-run
+    discovery rather than reopening the same path.</li>
+    <li><strong>Test against a file, not the device.</strong> Point your writer at
+    <code>/tmp/panel.bin</code> and <code>hexdump</code> it. Steps 1 through 5 can be fully
+    verified with no device access and no root.</li>
+  </ul>
+
+  <div class="call reach"><span class="tag">Optional, and genuinely optional</span>
+  <p>Some firmware revisions reject a write shorter than the declared 64-byte report. Yours
+  does not appear to, but if the panel stays dark despite a byte-perfect 13-byte write, pad the
+  packet out to 64 bytes with zeros and try again. Treat it as a stretch goal, not a step.</p></div>
+
+  <p>Pick a language and go. The Go page assumes you can already read and write Go and spends
+  its time on the parts this project makes awkward. The Rust page assumes you have never
+  written Rust and treats this as a first project — including an explicit list of the Rust
+  features you are allowed to ignore.</p>
+
+  <div class="mobile-next nextlinks">
+    <a class="nextlink" href="go.html" style="border-left-color:#0092B5">
+      <span class="lang">Build it in Go →</span><span class="sub">Assumes you know some Go</span></a>
+    <a class="nextlink" href="rust.html" style="border-left-color:#B3411F">
+      <span class="lang">Build it in Rust →</span><span class="sub">Assumes you know none</span></a>
+  </div>
+</section>
+
+</main>
+
+<footer class="footer">
+  <p>Protocol reverse engineered from the iUnity Windows binary by
+  <span class="mono-col">nishtahir/antec-flux-pro-display</span> and
+  <span class="mono-col">systemdbrew/antec-flux-display</span>. Hardware details on this page were
+  verified against an Antec Performance 1 FT on Linux 7.1.4, with a Ryzen CPU and a Radeon RX 9070.</p>
+</footer>
+
+</div>
+
+<script>
+(function(){
+  var root=document.documentElement, btn=document.getElementById('themeToggle');
+  function stored(){ try{ return localStorage.getItem('antec-theme'); }catch(e){ return null; } }
+  var s=stored(); if(s) root.setAttribute('data-theme',s);
+  btn.addEventListener('click',function(){
+    var dark = root.getAttribute('data-theme')==='dark' ||
+      (!root.getAttribute('data-theme') && matchMedia('(prefers-color-scheme: dark)').matches);
+    var next = dark ? 'light' : 'dark';
+    root.setAttribute('data-theme',next);
+    try{ localStorage.setItem('antec-theme',next); }catch(e){}
+  });
+
+  document.querySelectorAll('.codewrap').forEach(function(w){
+    var pre=w.querySelector('pre'); if(!pre) return;
+    var b=document.createElement('button');
+    b.type='button'; b.className='copy'; b.textContent='Copy';
+    b.addEventListener('click',function(){
+      var t=pre.innerText;
+      var done=function(){ b.textContent='Copied'; b.classList.add('done');
+        setTimeout(function(){ b.textContent='Copy'; b.classList.remove('done'); },1400); };
+      if(navigator.clipboard && navigator.clipboard.writeText){
+        navigator.clipboard.writeText(t).then(done,function(){ fallback(t,done); });
+      } else { fallback(t,done); }
+    });
+    w.appendChild(b);
+  });
+  function fallback(text,cb){
+    var ta=document.createElement('textarea');
+    ta.value=text; ta.setAttribute('readonly','');
+    ta.style.cssText='position:absolute;left:-9999px';
+    document.body.appendChild(ta); ta.select();
+    try{ document.execCommand('copy'); cb(); }catch(e){}
+    document.body.removeChild(ta);
+  }
+})();
+</script>
+</body>
+</html>

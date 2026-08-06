@@ -1,0 +1,23 @@
+[Unit]
+Description=Antec case temperature display
+After=multi-user.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/antec-display.py
+Restart=always
+RestartSec=5
+
+# The script only needs to read hwmon and write one hidraw node.
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateNetwork=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_UNIX
+MemoryDenyWriteExecute=yes
+
+[Install]
+WantedBy=multi-user.target

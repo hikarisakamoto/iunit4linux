@@ -1,0 +1,1289 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Build it in Rust — Antec panel</title>
+<style>
+:root{
+  --bg:#F1F3F5; --surface:#FFFFFF; --surface-2:#E7EAEE; --sunken:#DDE1E7;
+  --text:#171B21; --dim:#5A626E; --faint:#858D99;
+  --line:#D2D7DE; --line-soft:#E3E7EC;
+  --accent:#B3411F; --accent-ink:#93341A; --accent-wash:#F7EAE5;
+  --hdr:#5E7387; --cmd:#6A6398; --cpu:#B4741B; --gpu:#2C7169; --sum:#A03C36;
+  --ok:#2C7169; --warn:#A0632B; --bad:#A03C36;
+  --shadow:0 1px 2px rgba(20,25,32,.06), 0 8px 24px -12px rgba(20,25,32,.18);
+  --mono:ui-monospace,"SF Mono","JetBrains Mono","Fira Code","DejaVu Sans Mono",monospace;
+  --sans:system-ui,"Segoe UI",Roboto,"Noto Sans","DejaVu Sans",sans-serif;
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --bg:#0F1216; --surface:#161A20; --surface-2:#1D222A; --sunken:#0B0E12;
+    --text:#E3E7EC; --dim:#98A1AE; --faint:#6C7683;
+    --line:#282E37; --line-soft:#1F242C;
+    --accent:#E07B54; --accent-ink:#EE9878; --accent-wash:#2A1712;
+    --hdr:#8AA3BA; --cmd:#9A92CC; --cpu:#D9A048; --gpu:#5AAFA3; --sum:#D2726A;
+    --ok:#5AAFA3; --warn:#D09A54; --bad:#D2726A;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 30px -14px rgba(0,0,0,.7);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0F1216; --surface:#161A20; --surface-2:#1D222A; --sunken:#0B0E12;
+  --text:#E3E7EC; --dim:#98A1AE; --faint:#6C7683;
+  --line:#282E37; --line-soft:#1F242C;
+  --accent:#E07B54; --accent-ink:#EE9878; --accent-wash:#2A1712;
+  --hdr:#8AA3BA; --cmd:#9A92CC; --cpu:#D9A048; --gpu:#5AAFA3; --sum:#D2726A;
+  --ok:#5AAFA3; --warn:#D09A54; --bad:#D2726A;
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 30px -14px rgba(0,0,0,.7);
+}
+:root[data-theme="light"]{
+  --bg:#F1F3F5; --surface:#FFFFFF; --surface-2:#E7EAEE; --sunken:#DDE1E7;
+  --text:#171B21; --dim:#5A626E; --faint:#858D99;
+  --line:#D2D7DE; --line-soft:#E3E7EC;
+  --accent:#B3411F; --accent-ink:#93341A; --accent-wash:#F7EAE5;
+  --hdr:#5E7387; --cmd:#6A6398; --cpu:#B4741B; --gpu:#2C7169; --sum:#A03C36;
+  --ok:#2C7169; --warn:#A0632B; --bad:#A03C36;
+  --shadow:0 1px 2px rgba(20,25,32,.06), 0 8px 24px -12px rgba(20,25,32,.18);
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:1.5rem}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{animation:none!important;transition:none!important}}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);
+  font-size:16.5px;line-height:1.65;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1180px;margin:0 auto;padding:0 1.5rem 6rem;
+  display:grid;grid-template-columns:minmax(0,1fr);gap:0}
+@media (min-width:1000px){.wrap{grid-template-columns:15.5rem minmax(0,1fr);gap:3.5rem;align-items:start}}
+.masthead{grid-column:1/-1;padding:3.5rem 0 2rem;border-bottom:1px solid var(--line)}
+.backlink{font-family:var(--mono);font-size:.75rem;letter-spacing:.06em;color:var(--dim);
+  text-decoration:none;display:inline-block;margin-bottom:1.5rem}
+.backlink:hover{color:var(--accent-ink)}
+.kicker{font-family:var(--mono);font-size:.72rem;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--accent-ink);margin:0 0 1rem}
+h1{font-family:var(--mono);font-size:clamp(1.9rem,4.2vw,2.9rem);line-height:1.1;
+  letter-spacing:-.02em;font-weight:600;margin:0 0 1rem;text-wrap:balance}
+.standfirst{font-size:1.12rem;color:var(--dim);max-width:62ch;margin:0}
+.masthead-meta{display:flex;flex-wrap:wrap;gap:.5rem;margin-top:1.75rem}
+.chip{font-family:var(--mono);font-size:.74rem;letter-spacing:.04em;padding:.3rem .6rem;
+  border:1px solid var(--line);border-radius:2px;background:var(--surface);color:var(--dim)}
+.rail{position:sticky;top:1.5rem;padding:2.5rem 0;font-size:.9rem;display:none}
+@media (min-width:1000px){.rail{display:block}}
+.rail h2{font-family:var(--mono);font-size:.7rem;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--faint);margin:0 0 .9rem;font-weight:600;display:flex;justify-content:space-between}
+.rail h2 .prog{color:var(--accent-ink);font-variant-numeric:tabular-nums}
+.rail ol{list-style:none;margin:0 0 2rem;padding:0;display:flex;flex-direction:column;gap:.1rem}
+.rail a{display:block;padding:.3rem .6rem;color:var(--dim);text-decoration:none;
+  border-left:2px solid var(--line-soft);line-height:1.4}
+.rail a:hover{color:var(--text);border-left-color:var(--accent);background:var(--surface)}
+.rail a:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.rail a.done{color:var(--faint)}
+.rail a.done .num::after{content:" ✓";color:var(--ok)}
+.rail .num{font-family:var(--mono);font-size:.74rem;color:var(--faint);margin-right:.5rem}
+.nextlink{display:block;padding:.7rem .8rem;background:var(--surface);border:1px solid var(--line);
+  border-left-width:3px;border-left-color:#0092B5;border-radius:3px;text-decoration:none;color:var(--text)}
+.nextlink:hover{box-shadow:var(--shadow)}
+.nextlink:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.nextlink .lang{font-family:var(--mono);font-weight:600;font-size:.9rem;display:block}
+.nextlink .sub{font-size:.78rem;color:var(--dim)}
+main{padding:2.5rem 0;min-width:0}
+section{padding:2.75rem 0;border-bottom:1px solid var(--line-soft)}
+section:first-of-type{padding-top:1rem}
+h2{font-family:var(--mono);font-size:1.4rem;font-weight:600;letter-spacing:-.01em;
+  margin:0 0 .8rem;text-wrap:balance;scroll-margin-top:1.5rem}
+h2 .sec-num{color:var(--accent);font-weight:400;margin-right:.7rem}
+h3{font-family:var(--mono);font-size:1.02rem;font-weight:600;margin:2rem 0 .5rem}
+p{margin:0 0 1rem;max-width:68ch}
+ul,ol.body{max-width:66ch;padding-left:1.3rem;margin:0 0 1rem}
+li{margin-bottom:.45rem}
+a{color:var(--accent-ink);text-underline-offset:2px}
+a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+code{font-family:var(--mono);font-size:.87em;background:var(--surface-2);
+  padding:.1em .35em;border-radius:2px;word-break:break-word}
+strong{font-weight:650}
+.goal{font-size:1.05rem;color:var(--text);max-width:64ch;margin-bottom:1.5rem;
+  padding-left:1rem;border-left:3px solid var(--accent)}
+.codewrap{position:relative;margin:0 0 1.5rem}
+.codewrap .label{font-family:var(--mono);font-size:.68rem;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--faint);display:block;margin-bottom:.4rem}
+pre{margin:0;background:var(--sunken);border:1px solid var(--line);border-radius:3px;
+  padding:1rem 1.1rem;overflow-x:auto;font-family:var(--mono);font-size:.83rem;line-height:1.62}
+pre code{background:none;padding:0;font-size:inherit}
+.copy{position:absolute;top:1.6rem;right:.5rem;font-family:var(--mono);font-size:.68rem;
+  letter-spacing:.06em;text-transform:uppercase;background:var(--surface);color:var(--dim);
+  border:1px solid var(--line);border-radius:2px;padding:.25rem .5rem;cursor:pointer;opacity:0;
+  transition:opacity .12s}
+.codewrap:hover .copy,.copy:focus-visible{opacity:1}
+.copy:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.copy.done{color:var(--ok);border-color:var(--ok)}
+.tok-com{color:var(--faint);font-style:italic}
+.tok-str{color:var(--gpu)}
+.tok-num{color:var(--sum)}
+.tok-kw{color:var(--cmd);font-weight:600}
+.tok-mac{color:var(--accent-ink)}
+.tok-typ{color:var(--hdr)}
+.call{border:1px solid var(--line);border-left-width:3px;background:var(--surface);
+  border-radius:3px;padding:1rem 1.15rem;margin:0 0 1.5rem;max-width:70ch}
+.call > :last-child{margin-bottom:0}
+.call .tag{font-family:var(--mono);font-size:.68rem;letter-spacing:.13em;text-transform:uppercase;
+  font-weight:600;display:block;margin-bottom:.4rem}
+.call.gotcha{border-left-color:var(--bad)} .call.gotcha .tag{color:var(--bad)}
+.call.why{border-left-color:var(--hdr)} .call.why .tag{color:var(--hdr)}
+.call.check{border-left-color:var(--ok)} .call.check .tag{color:var(--ok)}
+.call.reach{border-left-color:var(--accent)} .call.reach .tag{color:var(--accent-ink)}
+.call.wrong{border-left-color:var(--warn)} .call.wrong .tag{color:var(--warn)}
+.call ul{margin-bottom:0}
+.ck{display:flex;align-items:center;gap:.5rem;margin-top:.9rem;font-family:var(--mono);
+  font-size:.75rem;letter-spacing:.05em;text-transform:uppercase;color:var(--faint);cursor:pointer}
+.ck input{accent-color:var(--ok);width:1rem;height:1rem;cursor:pointer}
+.ck input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.tablewrap{overflow-x:auto;margin:0 0 1.5rem;border:1px solid var(--line);border-radius:3px}
+table{border-collapse:collapse;width:100%;font-size:.88rem;background:var(--surface)}
+th,td{text-align:left;padding:.55rem .8rem;border-bottom:1px solid var(--line-soft);vertical-align:top}
+th{font-family:var(--mono);font-size:.7rem;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--faint);font-weight:600;background:var(--surface-2);white-space:nowrap}
+tr:last-child td{border-bottom:none}
+td code{background:none;padding:0}
+.mono-col{font-family:var(--mono);white-space:nowrap;font-variant-numeric:tabular-nums}
+details{border:1px solid var(--line);border-radius:3px;background:var(--surface);
+  margin:0 0 1.5rem;overflow:hidden}
+details > summary{cursor:pointer;padding:.7rem 1rem;font-family:var(--mono);font-size:.8rem;
+  letter-spacing:.03em;color:var(--dim);list-style:none;user-select:none}
+details > summary::-webkit-details-marker{display:none}
+details > summary::before{content:"▸ ";color:var(--accent)}
+details[open] > summary::before{content:"▾ "}
+details[open] > summary{border-bottom:1px solid var(--line-soft);color:var(--text)}
+details > summary:hover{color:var(--text);background:var(--surface-2)}
+details > summary:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.details-body{padding:1rem 1.1rem .1rem}
+.theme-toggle{position:fixed;top:1rem;right:1rem;z-index:10;font-family:var(--mono);
+  font-size:.7rem;letter-spacing:.1em;text-transform:uppercase;background:var(--surface);
+  color:var(--dim);border:1px solid var(--line);border-radius:2px;padding:.4rem .7rem;cursor:pointer}
+.theme-toggle:hover{color:var(--text);border-color:var(--accent)}
+.theme-toggle:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.footer{grid-column:1/-1;padding:3rem 0 0;color:var(--faint);font-size:.85rem;
+  border-top:1px solid var(--line);margin-top:2rem}
+.mobile-next{display:block;margin:2rem 0 0}
+@media (min-width:1000px){.mobile-next{display:none}}
+.skiplist{max-width:70ch;margin:0 0 1.5rem;padding:0;list-style:none;
+  display:grid;gap:.35rem}
+.skiplist li{margin:0;padding:.45rem .7rem;background:var(--surface);border:1px solid var(--line-soft);
+  border-radius:3px;font-size:.9rem;display:flex;gap:.6rem;align-items:baseline}
+.skiplist .no{font-family:var(--mono);font-size:.72rem;color:var(--ok);letter-spacing:.06em;
+  text-transform:uppercase;white-space:nowrap;font-weight:600}
+</style>
+</head>
+<body>
+<button class="theme-toggle" id="themeToggle" type="button">Theme</button>
+
+<div class="wrap">
+
+<header class="masthead">
+  <a class="backlink" href="foundations.html">← Foundations: the hardware and the protocol</a>
+  <p class="kicker">Antec panel · Rust</p>
+  <h1>Build it in Rust</h1>
+  <p class="standfirst">A first Rust project that ends with something physically running on your
+  desk. This page assumes you have never written Rust — but that you can program, and that you
+  know some Go, so it points out where the two languages disagree rather than explaining what a
+  loop is.</p>
+  <div class="masthead-meta">
+    <span class="chip">0 dependencies until step 8</span>
+    <span class="chip">no async</span>
+    <span class="chip">no lifetimes</span>
+    <span class="chip">rustc 1.97.1 verified</span>
+  </div>
+</header>
+
+<nav class="rail" aria-label="Contents">
+  <h2><span>Steps</span><span class="prog" id="prog">0 / 9</span></h2>
+  <ol>
+    <li><a href="#s0"><span class="num">0</span>Orientation</a></li>
+    <li><a href="#s1" data-step="1"><span class="num">1</span>The packet builder</a></li>
+    <li><a href="#s2" data-step="2"><span class="num">2</span>Read one temperature</a></li>
+    <li><a href="#s3" data-step="3"><span class="num">3</span>Find the sensors</a></li>
+    <li><a href="#s4" data-step="4"><span class="num">4</span>Pick the right GPU</a></li>
+    <li><a href="#s5" data-step="5"><span class="num">5</span>Find the device, write</a></li>
+    <li><a href="#s6" data-step="6"><span class="num">6</span>The loop</a></li>
+    <li><a href="#s7" data-step="7"><span class="num">7</span>Survive a replug</a></li>
+    <li><a href="#s8" data-step="8"><span class="num">8</span>Graceful shutdown</a></li>
+    <li><a href="#s9" data-step="9"><span class="num">9</span>Ship it</a></li>
+  </ol>
+  <h2><span>Or</span></h2>
+  <a class="nextlink" href="go.html">
+    <span class="lang">Go</span><span class="sub">Same program, same steps</span></a>
+</nav>
+
+<main>
+
+<section id="s0">
+  <h2><span class="sec-num">0</span>Orientation</h2>
+  <p class="goal">Rust has a reputation for being hard to start. Most of that reputation comes
+  from features this project does not use. Here is what you can ignore.</p>
+
+  <h3>What you are allowed to skip</h3>
+  <p>This matters more than it sounds. Beginners stall because they try to learn Rust
+  front-to-back before writing anything. You will not need any of the following, at any point,
+  and you can close every browser tab about them:</p>
+
+  <ul class="skiplist">
+    <li><span class="no">skip</span><span><strong><code>async</code>/<code>await</code>, futures, tokio.</strong> This program is one thread that sleeps for a second. Async would be strictly worse.</span></li>
+    <li><span class="no">skip</span><span><strong>Threads, channels, <code>Mutex</code>, <code>Send</code>/<code>Sync</code>.</strong> None. One shared flag appears in step 8 as three lines of documented boilerplate.</span></li>
+    <li><span class="no">skip</span><span><strong>Lifetime annotations</strong> — the <code>&lt;'a&gt;</code> things. You will never write one here, because we return owned values everywhere. That is a legitimate permanent style, not a beginner crutch.</span></li>
+    <li><span class="no">skip</span><span><strong>Writing traits, generics, trait bounds.</strong> You will <em>use</em> three traits from the standard library and author none.</span></li>
+    <li><span class="no">skip</span><span><strong>Custom error types, <code>thiserror</code>, <code>From</code> impls.</strong> One boxed error type carries you the whole way.</span></li>
+    <li><span class="no">skip</span><span><strong><code>unsafe</code>, FFI, <code>libc</code>, bindgen.</strong> Zero. A task that sounds like it needs USB bindings needs none at all.</span></li>
+    <li><span class="no">skip</span><span><strong><code>Rc</code>, <code>RefCell</code>, interior mutability, smart pointers.</strong> Not once.</span></li>
+  </ul>
+
+  <p>If you are working through <em>The Rust Programming Language</em> alongside this: chapters
+  1–9, 11 and 13 cover everything used here. Chapter 10 (generics, traits, lifetimes), 15 (smart
+  pointers) and 16 (concurrency) can wait.</p>
+
+  <h3>Setting up</h3>
+  <p>You have <code>rustc</code> and <code>cargo</code> from your distribution, so there is
+  nothing to install and no <code>rustup</code> involved:</p>
+
+  <div class="codewrap"><span class="label">shell</span>
+<pre><code>cargo new antec-display
+cd antec-display
+cargo run</code></pre></div>
+
+  <p>That gives you <code>Cargo.toml</code> (the manifest, like <code>go.mod</code>),
+  <code>src/main.rs</code>, and a <code>target/</code> directory for build output. The whole
+  program will live in <code>main.rs</code> — around 200 lines, which is well within the range
+  where splitting into modules would cost more than it buys.</p>
+
+  <div class="tablewrap"><table>
+    <thead><tr><th>You know this from Go</th><th>In Rust</th></tr></thead>
+    <tbody>
+      <tr><td><code>go build</code> / <code>go test</code></td><td><code>cargo build</code> / <code>cargo test</code>. Plus <code>cargo check</code>, which type-checks without generating code — much faster, and the right inner loop.</td></tr>
+      <tr><td><code>go get</code></td><td><code>cargo add</code></td></tr>
+      <tr><td><code>if err != nil</code></td><td><code>Result</code> plus the <code>?</code> operator, which is the same early return with less typing</td></tr>
+      <tr><td>a nil pointer meaning &ldquo;absent&rdquo;</td><td><code>Option&lt;T&gt;</code>, and the compiler will not let you forget the absent case</td></tr>
+      <tr><td><code>defer f.Close()</code></td><td>Nothing. The file closes when it goes out of scope. You never call <code>close</code>.</td></tr>
+      <tr><td><code>[]byte</code></td><td><em>Three</em> types: <code>Vec&lt;u8&gt;</code> (owned, growable), <code>&amp;[u8]</code> (a borrowed view), <code>[u8; 12]</code> (fixed size, known at compile time)</td></tr>
+      <tr><td><code>string</code></td><td><em>Two</em> types: <code>String</code> (owned) and <code>&amp;str</code> (borrowed). Both are validated UTF-8, which is exactly why <code>0xEE</code> cannot live in one.</td></tr>
+      <tr><td>value vs pointer receivers</td><td><code>&amp;self</code> vs <code>&amp;mut self</code>. Maps almost perfectly — lean on this.</td></tr>
+      <tr><td>implicit interface satisfaction</td><td>Traits must be <em>imported</em> to be callable. This trips up every Go programmer exactly once, in step 5.</td></tr>
+      <tr><td><code>os/signal</code></td><td>Nothing in the standard library. See step 8.</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>Reading compiler errors</h3>
+  <p>Rust's errors are long, and beginners bounce off them by reading top-down. Read
+  <strong>bottom-up</strong>: the <code>help:</code> line at the end very often contains the
+  literal fix. Two habits worth forming on day one:</p>
+  <ul>
+    <li><code>cargo clippy</code> after every step. It is a free, tireless reviewer that catches
+    non-idiomatic code before a human would, and its suggestions are genuinely instructive.</li>
+    <li><code>rustc --explain E0502</code> for any error code you do not recognise — it prints a
+    page-long explanation with examples.</li>
+  </ul>
+
+  <div class="call why"><span class="tag">Do the shell warm-up first</span>
+  <p>Before writing any Rust, go and do the
+  <a href="foundations.html#warmup">warm-up on the foundations page</a> — driving the panel with
+  <code>printf</code> and <code>dd</code>. It takes thirty seconds. From then on, every failure
+  is definitely in your code, and when you are new to a language that certainty is worth a
+  lot.</p></div>
+</section>
+
+<section id="s1">
+  <h2><span class="sec-num">1</span>The packet builder</h2>
+  <p class="goal">Turn two temperatures into the twelve bytes from the protocol table. Pure
+  functions, no files, no device — and therefore testable before you have met anything hard.</p>
+
+  <p>Two functions: one that splits a single temperature into its three digit bytes, one that
+  assembles and checksums the packet. Either half of the panel can be absent, so the digit
+  function needs to express &ldquo;no reading&rdquo; and return <code>0xEE 0xEE 0xEE</code>.</p>
+
+  <p>That is <code>Option&lt;f32&gt;</code> — Rust's answer to a nil pointer, except the compiler
+  forces you to handle the absent case. You will handle it with <code>match</code>, which is a
+  <code>switch</code> that must cover every possibility.</p>
+
+  <div class="call reach"><span class="tag">Reach for</span>
+  <p><code>[u8; 12]</code> and <code>[u8; 3]</code> — fixed-size arrays, not <code>Vec</code>.
+  <code>const</code> for the blank triple. <code>f32::clamp</code> and <code>f32::round</code>.
+  <code>copy_from_slice</code> to drop a triple into place. <code>{:02X?}</code> to print an
+  array as hex while you are poking at it.</p></div>
+
+  <div class="call gotcha"><span class="tag">Gotcha · the checksum overflows, and Rust panics</span>
+  <p>The big one. <code>0x55 + 0xAA + 0x01 = 0x100</code> — your accumulator exceeds a byte on
+  the third byte of every packet, before any temperature is involved.</p>
+  <p>If you accumulate in a <code>u8</code>, a <strong>debug build panics</strong> with
+  <em>attempt to add with overflow</em>, and a <strong>release build silently wraps</strong> —
+  giving the correct answer, because the spec wants exactly that. So the bug presents as
+  &ldquo;my program only crashes when I'm developing, and works when I ship it&rdquo;, which is
+  backwards from every instinct you have.</p>
+  <p>Sum into a <code>u32</code> and narrow once at the end with <code>as u8</code>. (Go, for
+  contrast, wraps silently in every build and you never notice.)</p></div>
+
+  <div class="call gotcha"><span class="tag">Gotcha · <code>as</code> has two different behaviours</span>
+  <p><code>300.7_f32 as u8</code> gives <code>255</code> — float-to-integer casts
+  <em>saturate</em>. <code>300_i32 as u8</code> gives <code>44</code> — integer-to-integer casts
+  <em>wrap</em>. Same keyword, opposite rules, no warning either way.</p>
+  <p>Clamp before you cast, every time, and the distinction stops mattering.</p></div>
+
+  <div class="call wrong"><span class="tag">Reaching for the wrong tool</span>
+  <p>Do not build this as a <code>String</code>. Two independent reasons: the digits are
+  <em>values</em>, not characters (44.3&nbsp;°C is <code>0x04</code>, not <code>b'4'</code>), and
+  Rust's <code>String</code> is validated UTF-8, so <code>0xEE</code> cannot legally go in one at
+  all. The compiler will stop you, but it is worth knowing why.</p></div>
+
+  <div class="call check"><span class="tag">Checkpoint</span>
+  <p>Write tests. In Rust they live in the same file, in a <code>#[cfg(test)] mod tests</code>
+  block at the bottom, and <code>cargo test</code> runs them. Doing this now gives you a
+  self-verification mechanism for every later step.</p>
+  <div class="codewrap"><span class="label">expected</span>
+<pre><code>44.3 / 42.0   ->  55 AA 01 01 06 04 04 03 04 02 00 18
+blank / blank ->  55 AA 01 01 06 EE EE EE EE EE EE 9B</code></pre></div>
+  <p>Add clamping cases: <code>0.0</code> gives <code>[0,0,0]</code>, <code>99.9</code> gives
+  <code>[9,9,9]</code>, <code>150.0</code> clamps to <code>[9,9,9]</code>, <code>-5.0</code> to
+  <code>[0,0,0]</code>. Then a self-consistency test that byte 11 equals the low byte of the sum
+  of bytes 0–10.</p>
+  <p><strong>Run the tests in both profiles</strong> — <code>cargo test</code> and
+  <code>cargo test --release</code>. If they disagree, you have the <code>u8</code> overflow
+  bug, and this is the cheapest possible way to find it.</p>
+  <label class="ck"><input type="checkbox" data-ck="rs1"> mark step done</label></div>
+
+  <details><summary>Reference implementation — step 1</summary><div class="details-body">
+  <div class="codewrap"><span class="label">src/main.rs</span>
+<pre data-lang="rust"><code>const BLANK: [u8; 3] = [0xEE, 0xEE, 0xEE];
+
+/// A temperature that may not be available. `None` blanks half the panel.
+type Reading = Option&lt;f32&gt;;
+
+fn digits(r: Reading) -&gt; [u8; 3] {
+    match r {
+        None =&gt; BLANK,
+        Some(c) =&gt; {
+            // Clamp before casting: a 3-digit temperature has nowhere to go,
+            // and `as` saturates for floats but wraps for integers.
+            let tenths = (c.clamp(0.0, 99.9) * 10.0).round() as u32;
+            [
+                (tenths / 100) as u8,
+                (tenths / 10 % 10) as u8,
+                (tenths % 10) as u8,
+            ]
+        }
+    }
+}
+
+fn build_packet(cpu: Reading, gpu: Reading) -&gt; [u8; 12] {
+    let mut p = [0u8; 12];
+    p[0..2].copy_from_slice(&amp;[0x55, 0xAA]);
+    p[2..5].copy_from_slice(&amp;[0x01, 0x01, 0x06]);
+    p[5..8].copy_from_slice(&amp;digits(cpu));
+    p[8..11].copy_from_slice(&amp;digits(gpu));
+
+    // Sum in u32: eleven bytes overflow a u8, which panics in debug builds.
+    let sum: u32 = p[..11].iter().map(|&amp;b| b as u32).sum();
+    p[11] = sum as u8;
+    p
+}</code></pre></div>
+  <div class="codewrap"><span class="label">src/main.rs — bottom of the file</span>
+<pre data-lang="rust"><code>#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn known_vectors() {
+        assert_eq!(
+            build_packet(Some(44.3), Some(42.0)),
+            [0x55, 0xAA, 0x01, 0x01, 0x06, 4, 4, 3, 4, 2, 0, 0x18]
+        );
+        assert_eq!(
+            build_packet(None, None),
+            [0x55, 0xAA, 0x01, 0x01, 0x06, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0x9B]
+        );
+    }
+
+    #[test]
+    fn clamps_out_of_range() {
+        assert_eq!(digits(Some(0.0)), [0, 0, 0]);
+        assert_eq!(digits(Some(99.9)), [9, 9, 9]);
+        assert_eq!(digits(Some(150.0)), [9, 9, 9]);
+        assert_eq!(digits(Some(-5.0)), [0, 0, 0]);
+    }
+
+    #[test]
+    fn checksum_matches_body() {
+        let p = build_packet(Some(44.3), Some(42.0));
+        let sum: u32 = p[..11].iter().map(|&amp;b| b as u32).sum();
+        assert_eq!(sum as u8, p[11]);
+    }
+}</code></pre></div>
+  </div></details>
+</section>
+
+<section id="s2">
+  <h2><span class="sec-num">2</span>Read one temperature</h2>
+  <p class="goal">Get <code>47.1</code> out of <code>/sys/class/hwmon/hwmon4/temp1_input</code>.
+  Hardcode the path — you will break it deliberately in step 3.</p>
+
+  <p>Read the file, trim it, parse it, divide by a thousand. Four operations, and two of them
+  can fail — which makes this the step where you meet <code>Result</code> and the <code>?</code>
+  operator, the single most important thing to get comfortable with in Rust.</p>
+
+  <p><code>?</code> means &ldquo;if this failed, return the error from this function
+  immediately; otherwise give me the value&rdquo;. It is <code>if err != nil { return err }</code>
+  as a single character. For it to work, your function has to return a <code>Result</code>, and
+  <code>fn main()</code> is allowed to do that too.</p>
+
+  <div class="call reach"><span class="tag">Reach for</span>
+  <p><code>std::fs::read_to_string</code>, <code>.trim()</code>, <code>.parse()</code>. For the
+  error type, use <code>Box&lt;dyn Error&gt;</code>: it accepts any error, including a plain
+  <code>String</code>, which is what lets you attach the file path.</p></div>
+
+  <div class="call why"><span class="tag">Why <code>Box&lt;dyn Error&gt;</code></span>
+  <p>This one function produces two <em>different</em> error types — an <code>io::Error</code>
+  from reading and a <code>ParseIntError</code> from parsing — and <code>?</code> will not unify
+  them on its own. <code>Box&lt;dyn Error&gt;</code> is a box that holds any of them.</p>
+  <p>Treat it as provisional and do not go building a custom error <code>enum</code> with
+  <code>From</code> implementations. That is the fastest known route to deciding Rust error
+  handling is miserable, and you do not need it — this type carries the whole program.</p></div>
+
+  <div class="call gotcha"><span class="tag">Gotcha · the trailing newline</span>
+  <p>The file really contains <code>47125\n</code>. Skip <code>.trim()</code> and
+  <code>.parse()</code> fails with <em>invalid digit found in string</em>, which never mentions
+  whitespace and reads like the file is corrupt. Trim on read, as a reflex.</p></div>
+
+  <div class="call gotcha"><span class="tag">Gotcha · you cannot return what <code>.trim()</code> gives you</span>
+  <p>This is your first real encounter with ownership, and it is worth slowing down for.</p>
+  <p><code>read_to_string</code> hands you a <code>String</code> that owns a heap buffer.
+  <code>.trim()</code> hands back a <code>&amp;str</code> — a <em>view into that buffer</em>, not
+  a copy. When the function returns, the <code>String</code> is dropped and the buffer freed, so
+  the view would point at nothing. Rust refuses: <em>cannot return value referencing local
+  variable</em>.</p>
+  <p>The fix is <code>.trim().to_string()</code>, which allocates a fresh owned string. Coming
+  from Go, where slicing a string is free, that feels wasteful. It is one small allocation per
+  second — irrelevant here, and it buys you a function whose return value has no strings
+  attached. <strong>Returning owned values everywhere is the reason you will never write a
+  lifetime annotation in this project.</strong></p></div>
+
+  <div class="call gotcha"><span class="tag">Gotcha · integer division eats the decimal</span>
+  <p><code>47125 / 1000</code> is <code>47</code>. You need <code>milli as f32 / 1000.0</code>.
+  Worth noticing that you could avoid floats entirely — <code>(milli + 50) / 100</code> gives
+  471 tenths directly, which is exactly what the digit splitter wants, with no rounding
+  subtleties. Either is fine; the point is that Rust makes you choose, so choose on
+  purpose.</p></div>
+
+  <div class="call check"><span class="tag">Checkpoint</span>
+  <p><code>cat /sys/class/hwmon/hwmon4/temp1_input</code> prints something like
+  <code>47125</code>; your program prints <code>47.1</code>. Cross-check with
+  <code>sensors</code>.</p>
+  <p>Then break it twice on purpose: point it at a path that does not exist, and at
+  <code>.../name</code>, which exists but will not parse. Both should print one clean line
+  naming the file. This proves your error plumbing before anything complicated rides on it.</p>
+  <p>One oddity you will notice: an error returned from <code>main</code> prints as
+  <code>Error: Os { code: 2, kind: NotFound, … }</code> rather than a sentence, because
+  <code>main</code> formats it with <code>Debug</code>. That is expected, not a mistake on your
+  part.</p>
+  <label class="ck"><input type="checkbox" data-ck="rs2"> mark step done</label></div>
+
+  <details><summary>Reference implementation — step 2</summary><div class="details-body">
+  <div class="codewrap"><span class="label">src/main.rs</span>
+<pre data-lang="rust"><code>use std::error::Error;
+use std::fs;
+use std::path::Path;
+
+/// Reads a small sysfs file and trims the trailing newline. Every sysfs read
+/// goes through here so the trim cannot be forgotten.
+fn read_sysfs(path: &amp;Path) -&gt; Result&lt;String, Box&lt;dyn Error&gt;&gt; {
+    let raw = fs::read_to_string(path).map_err(|e| format!("read {}: {e}", path.display()))?;
+    // to_string() because `raw` dies at the end of this function and a
+    // &amp;str into it would dangle.
+    Ok(raw.trim().to_string())
+}
+
+/// Degrees Celsius from a hwmon tempN_input file, which holds millidegrees.
+fn read_temp(path: &amp;Path) -&gt; Result&lt;f32, Box&lt;dyn Error&gt;&gt; {
+    let text = read_sysfs(path)?;
+    let milli: i32 = text
+        .parse()
+        .map_err(|e| format!("parse {}: {e}", path.display()))?;
+    Ok(milli as f32 / 1000.0)
+}</code></pre></div>
+  </div></details>
+</section>
+
+<section id="s3">
+  <h2><span class="sec-num">3</span>Find the sensors</h2>
+  <p class="goal">Replace the hardcoded path with a scan: given a driver name like
+  <code>k10temp</code>, find its <code>tempN_input</code> files and their labels.</p>
+
+  <p>Earn the step first. Reboot, or run <code>sudo udevadm trigger</code>, and check whether
+  <code>hwmon4</code> is still <code>k10temp</code>. The numbering is assigned in driver-probe
+  order and moves between boots.</p>
+
+  <p>The shape: read <code>/sys/class/hwmon</code>, and for each entry read its <code>name</code>
+  file and keep the ones matching the driver you want. Then in each of those directories, find
+  the files called <code>temp*_input</code> and read the matching <code>_label</code> beside
+  each.</p>
+
+  <div class="call reach"><span class="tag">Reach for</span>
+  <p><code>fs::read_dir</code>, <code>PathBuf</code>, <code>Path::join</code>,
+  <code>Vec</code>. <code>str::starts_with</code> and <code>ends_with</code> for matching
+  filenames. <code>.ok()</code> to turn a <code>Result</code> you do not care about into an
+  <code>Option</code>. A plain <code>struct</code> to pair a path with its label — with
+  <code>#[derive(Debug)]</code> on it so you can print it with <code>{:?}</code>.</p></div>
+
+  <div class="call gotcha"><span class="tag">Gotcha · <code>read_dir</code> gives you two layers of <code>Result</code></span>
+  <p><code>fs::read_dir(path)</code> returns a <code>Result</code> — opening a directory can
+  fail — and iterating it yields <em>another</em> <code>Result</code> per entry, because reading
+  can fail partway through. So you handle failure twice.</p>
+  <p>Two idioms: <code>let entry = entry?;</code> inside the loop propagates each error, or
+  <code>.flatten()</code> on the iterator silently drops failed entries. Flatten swallows errors,
+  which sounds bad and is actually right here — an unreadable entry in
+  <code>/sys/class/hwmon</code> is one you did not want.</p></div>
+
+  <div class="call gotcha"><span class="tag">Gotcha · never filter on <code>is_dir()</code></span>
+  <p>The highest-severity silent failure in this project, and the compiler is perfectly happy
+  with it.</p>
+  <p>Every entry under <code>/sys/class/hwmon</code> and <code>/sys/class/hidraw</code> is a
+  <strong>symlink</strong> into <code>/sys/devices/…</code>. <code>DirEntry::file_type()</code>
+  reports the type of the <em>link</em>, so <code>.is_dir()</code> is <code>false</code> for
+  every single one. Filter on it and you get an empty result set, no error, no panic — just
+  nothing.</p>
+  <p>Either use <code>entry.path().is_dir()</code>, which follows the link, or simply try to
+  read the <code>name</code> file and skip entries where that fails. The second is what the
+  reference does, and it is more robust anyway.</p></div>
+
+  <div class="call gotcha"><span class="tag">Gotcha · <code>PathBuf</code>, <code>Path</code>, <code>OsString</code>, <code>Cow</code></span>
+  <p>Where Go has one <code>string</code>, Rust has a small family. The rules of thumb:</p>
+  <ul>
+    <li><code>PathBuf</code> is to <code>&amp;Path</code> what <code>String</code> is to
+    <code>&amp;str</code> — owned versus borrowed.</li>
+    <li>Build paths with <code>.join()</code>, never <code>format!("{}/{}")</code>.</li>
+    <li>Print them with <code>.display()</code>; a path is not directly printable because it is
+    not guaranteed to be UTF-8.</li>
+    <li><code>entry.file_name()</code> gives an <code>OsString</code>. To compare it as text you
+    want <code>.to_string_lossy()</code>, which returns a <code>Cow&lt;str&gt;</code> — a type
+    that means &ldquo;borrowed unless I had to allocate&rdquo;. It shows up in error messages and
+    looks alien; you can treat it as a string.</li>
+  </ul>
+  <p>The task that forces all of this is deriving <code>temp1_label</code> from
+  <code>temp1_input</code>. Do it by trimming the suffix off the filename and rejoining, not by
+  <code>.to_str().unwrap().replace(…)</code> — that panics on non-UTF-8 and is fragile.</p></div>
+
+  <div class="call gotcha"><span class="tag">Gotcha · numbering has holes, and iteration is unordered</span>
+  <p><code>k10temp</code> here exposes <code>temp1</code>, <code>temp3</code> and
+  <code>temp4</code> — there is no <code>temp2</code>. Any <code>for i in 1..=n</code> loop is
+  wrong. Enumerate, never count.</p>
+  <p><code>read_dir</code> also returns entries in no particular order, so sort if you care. And
+  if you do sort, remember that <code>hwmon10</code> sorts before <code>hwmon2</code>
+  lexically.</p></div>
+
+  <div class="call gotcha"><span class="tag">Gotcha · labels are optional, and that is <code>Option</code>, not <code>Result</code></span>
+  <p><code>spd5118</code> and <code>ath12k_hwmon</code> have no <code>_label</code> files at all.
+  A missing label is normal. Model it as <code>Option&lt;String&gt;</code> and produce it with
+  <code>read_sysfs(&amp;p).ok()</code> — do not let a RAM sensor you do not care about abort your
+  whole scan.</p></div>
+
+  <div class="call check"><span class="tag">Checkpoint</span>
+  <p>Print what you found with <code>{:?}</code> and diff against the shell:</p>
+  <div class="codewrap"><span class="label">shell</span>
+<pre><code>for d in /sys/class/hwmon/hwmon*; do echo "$d $(cat $d/name)"; done</code></pre></div>
+  <p>Two specific things. Did you find <code>k10temp</code>'s <code>temp3</code> and
+  <code>temp4</code> despite there being no <code>temp2</code>? And did you get <em>any</em>
+  results — an empty list means the symlink trap.</p>
+  <label class="ck"><input type="checkbox" data-ck="rs3"> mark step done</label></div>
+
+  <details><summary>Reference implementation — step 3</summary><div class="details-body">
+  <div class="codewrap"><span class="label">src/main.rs</span>
+<pre data-lang="rust"><code>use std::path::PathBuf;
+
+#[derive(Debug)]
+struct Sensor {
+    path: PathBuf,
+    label: Option&lt;String&gt;, // many drivers expose no label at all
+}
+
+/// Every hwmon directory belonging to one driver. Note this does not filter
+/// on is_dir(): entries under /sys/class/hwmon are symlinks, so file_type()
+/// reports false for all of them. Reading `name` is the real test.
+fn hwmon_by_driver(driver: &amp;str) -&gt; Vec&lt;PathBuf&gt; {
+    let mut out = Vec::new();
+    let Ok(entries) = fs::read_dir("/sys/class/hwmon") else {
+        return out;
+    };
+    for entry in entries.flatten() {
+        let dir = entry.path();
+        if read_sysfs(&amp;dir.join("name")).is_ok_and(|n| n == driver) {
+            out.push(dir);
+        }
+    }
+    out.sort();
+    out
+}
+
+/// Every temperature sensor in one hwmon directory. Enumerates rather than
+/// counting: k10temp exposes temp1, temp3 and temp4 with no temp2.
+fn temp_inputs(dir: &amp;Path) -&gt; Vec&lt;Sensor&gt; {
+    let mut out = Vec::new();
+    let Ok(entries) = fs::read_dir(dir) else {
+        return out;
+    };
+    for entry in entries.flatten() {
+        let file_name = entry.file_name();
+        let name = file_name.to_string_lossy();
+        if !(name.starts_with("temp") &amp;&amp; name.ends_with("_input")) {
+            continue;
+        }
+        let label_path = dir.join(format!("{}_label", name.trim_end_matches("_input")));
+        out.push(Sensor {
+            path: entry.path(),
+            label: read_sysfs(&amp;label_path).ok(), // absent is normal
+        });
+    }
+    out.sort_by(|a, b| a.path.cmp(&amp;b.path));
+    out
+}</code></pre></div>
+  </div></details>
+</section>
+
+<section id="s4">
+  <h2><span class="sec-num">4</span>Pick the right GPU</h2>
+  <p class="goal">Given two <code>amdgpu</code> instances, choose the discrete card and not the
+  integrated one — and meet iterators properly while doing it.</p>
+
+  <p>A Ryzen desktop chip with integrated graphics gives you two <code>amdgpu</code> hwmon
+  directories. One is your RX 9070; the other is an iGPU sitting at idle forever.</p>
+
+  <div class="tablewrap"><table>
+    <thead><tr><th>Path</th><th>Inputs</th><th>Labels</th><th>Which</th></tr></thead>
+    <tbody>
+      <tr><td class="mono-col">hwmon2</td><td class="mono-col">3</td><td class="mono-col">edge, junction, mem</td><td><strong>Discrete</strong></td></tr>
+      <tr><td class="mono-col">hwmon3</td><td class="mono-col">1</td><td class="mono-col">edge</td><td>iGPU</td></tr>
+    </tbody>
+  </table></div>
+
+  <p>The heuristic: a discrete card reports edge, junction and memory; an integrated one reports
+  only edge. Among candidate directories for a driver, take the one with the most temperature
+  inputs, then within it prefer a specific label.</p>
+
+  <p>This is the one place in the project where an iterator chain is clearly better than a loop,
+  which makes it a good place to actually learn them rather than being told to.
+  <code>.map()</code> transforms each item, <code>.max_by_key()</code> picks a winner, and the
+  <code>?</code> at the end unwraps the <code>Option</code> it returns or bails out early.</p>
+
+  <div class="call gotcha"><span class="tag">Gotcha · iterators hand back references</span>
+  <p><code>.max_by_key()</code> on a borrowed iterator gives you <code>Option&lt;&amp;T&gt;</code>
+  — a reference — and then you want an owned value to return. This is the
+  &ldquo;everything is a reference and I need a value&rdquo; loop that makes iterator chains
+  frustrating at first.</p>
+  <p>Two escapes: <code>.clone()</code> the thing you need (a <code>PathBuf</code> clone is one
+  small allocation, and it is fine), or use <code>.into_iter()</code> instead of
+  <code>.iter()</code> so the iterator yields owned values in the first place. The reference
+  does the second, then clones one path at the end.</p></div>
+
+  <div class="call why"><span class="tag">It's a heuristic, so say what you picked</span>
+  <p>This guess is right on every machine anyone has tested and could be wrong on yours. One
+  <code>eprintln!</code> at startup naming the chosen paths turns a baffling wrong number into a
+  one-second diagnosis.</p></div>
+
+  <div class="call check"><span class="tag">Checkpoint</span>
+  <p>Your finder should land on <code>hwmon4/temp1_input</code> (Tctl) for the CPU and
+  <code>hwmon2/temp1_input</code> (edge) for the GPU — <em>not</em> <code>hwmon3</code>. Load the
+  GPU with something and watch the number move.</p>
+  <p>Run <code>cargo clippy</code> here in particular. Iterator code is where it has the most to
+  teach, and its suggestions on this step are usually worth taking.</p>
+  <label class="ck"><input type="checkbox" data-ck="rs4"> mark step done</label></div>
+
+  <details><summary>Reference implementation — step 4</summary><div class="details-body">
+  <div class="codewrap"><span class="label">src/main.rs</span>
+<pre data-lang="rust"><code>/// Picks a temperature input for a driver, preferring the first label in
+/// `preferred` that exists. Among several instances of the same driver
+/// (a discrete GPU and an iGPU both bind amdgpu) the one exposing the most
+/// sensors wins: a discrete card reports edge+junction+mem, an iGPU only edge.
+fn find_sensor(driver: &amp;str, preferred: &amp;[&amp;str]) -&gt; Option&lt;PathBuf&gt; {
+    let best = hwmon_by_driver(driver)
+        .into_iter()
+        .map(|dir| temp_inputs(&amp;dir))
+        .max_by_key(|inputs| inputs.len())?;
+
+    if best.is_empty() {
+        return None;
+    }
+    for want in preferred {
+        for s in &amp;best {
+            if s.label.as_deref().is_some_and(|l| l.eq_ignore_ascii_case(want)) {
+                return Some(s.path.clone());
+            }
+        }
+    }
+    Some(best[0].path.clone())
+}
+
+fn find_cpu() -&gt; Option&lt;PathBuf&gt; {
+    find_sensor("k10temp", &amp;["Tctl"]).or_else(|| find_sensor("coretemp", &amp;["Package id 0"]))
+}
+
+fn find_gpu() -&gt; Option&lt;PathBuf&gt; {
+    find_sensor("amdgpu", &amp;["edge"]).or_else(|| find_sensor("nvidia", &amp;[]))
+}</code></pre></div>
+  </div></details>
+</section>
+
+<section id="s5">
+  <h2><span class="sec-num">5</span>Find the device and write to it</h2>
+  <p class="goal">Locate your <code>/dev/hidrawN</code> by USB ID, then put a number on the panel
+  from your own code.</p>
+
+  <p>Discovery is the same directory-scanning shape as step 3 with a different matcher: walk
+  <code>/sys/class/hidraw/*</code>, read each <code>device/uevent</code>, and look for the
+  <code>HID_ID</code> line. <strong>You already know how to do this</strong> — write it before
+  opening the solution.</p>
+
+  <div class="call gotcha"><span class="tag">Gotcha · eight hex digits, not four</span>
+  <p><code>HID_ID=0003:00002022:00000522</code>. The vendor and product fields are zero-padded to
+  <strong>eight</strong> digits. Searching for <code>"2022:0522"</code> matches nothing, silently.
+  Build the needle with <code>format!(":{VENDOR_ID:08X}:{PRODUCT_ID:08X}")</code> and compare
+  case-insensitively, since the kernel writes lowercase.</p>
+  <p>This exact bug shipped in the first draft of the Python version in this repo.</p></div>
+
+  <p>The write half is where the foundations page's two rules bite. Your buffer is thirteen
+  bytes — a leading <code>0x00</code> report ID, then the packet — and it goes out in one call.</p>
+
+  <div class="call gotcha"><span class="tag">Gotcha · the trait must be imported to be callable</span>
+  <p>You will write <code>file.write_all(&amp;buf)</code> and get <em>no method named
+  <code>write_all</code> found for struct <code>File</code></em>, which is baffling because
+  <code>File</code> obviously can be written to.</p>
+  <p><code>write_all</code> comes from the <code>Write</code> trait, and in Rust a trait's methods
+  only exist on a type when the trait is in scope. Add <code>use std::io::Write;</code> at the
+  top. This is the concrete difference from Go's implicit interface satisfaction, and it catches
+  every Go programmer exactly once.</p></div>
+
+  <div class="call gotcha"><span class="tag">Gotcha · the file has to be <code>mut</code></span>
+  <p><code>write_all</code> takes <code>&amp;mut self</code>, so
+  <code>let file = File::open(…)</code> followed by <code>file.write_all(…)</code> gives you
+  <em>cannot borrow as mutable</em>.</p>
+  <p><code>mut</code> here describes the <em>binding</em>, not the file on disk — you are not
+  declaring the file mutable, you are declaring that you will call methods that need exclusive
+  access. Say <code>let mut file = …</code>.</p>
+  <p>The surprising escape hatch, once you meet it: <code>(&amp;file).write_all(…)</code> also
+  compiles, because the standard library implements <code>Write</code> for <code>&amp;File</code>
+  as well.</p></div>
+
+  <div class="call reach"><span class="tag">Reach for</span>
+  <p><code>OpenOptions::new().write(true).open(path)</code>. Not <code>File::create</code>,
+  which adds <code>O_CREAT|O_TRUNC</code> — harmless on a character device but wrong, and it will
+  fail confusingly under the hardened systemd unit in step 9. Do not add <code>.read(true)</code>
+  &ldquo;to be safe&rdquo;: you never read from this device, and the IN endpoint would block if
+  you tried.</p></div>
+
+  <div class="call wrong"><span class="tag">Reaching for the wrong tool</span>
+  <p><code>BufWriter</code>. It is the reflex from Go's <code>bufio.Writer</code> and it silently
+  breaks the protocol here: <code>hidraw</code> maps one <code>write()</code> syscall to one HID
+  report, so buffering can split your report or hold it until a flush you forgot.
+  <code>File::write_all</code> is already one syscall for a buffer this size.</p>
+  <p>And, one more time, because search results will push you there: not <code>hidapi</code>, not
+  <code>rusb</code>. They require detaching the kernel driver, drag in a C toolchain, and buy you
+  nothing over a file you can already open.</p></div>
+
+  <div class="call check"><span class="tag">Checkpoint</span>
+  <p>Aim at a scratch file before the real device — no root needed:</p>
+  <div class="codewrap"><span class="label">shell</span>
+<pre><code>$ hexdump -C /tmp/panel.bin
+00000000  00 55 aa 01 01 06 04 04  03 04 02 00 18
+$ wc -c /tmp/panel.bin
+13 /tmp/panel.bin</code></pre></div>
+  <p>Exactly 13 bytes. Then the definitive test against the real node:</p>
+  <div class="codewrap"><span class="label">shell</span>
+<pre><code>$ strace -e trace=write ./target/debug/antec-display
+write(3, "\0U\252\1\1\6\4\4\3\4\2\0\30", 13) = 13</code></pre></div>
+  <p>One write of 13 bytes per packet. If you get <em>Permission denied</em>, that is the udev
+  rule, not your code — see the <a href="foundations.html#perms">foundations page</a>.</p>
+  <label class="ck"><input type="checkbox" data-ck="rs5"> mark step done</label></div>
+
+  <details><summary>Reference implementation — step 5</summary><div class="details-body">
+  <div class="codewrap"><span class="label">src/main.rs</span>
+<pre data-lang="rust"><code>use std::fs::{File, OpenOptions};
+use std::io::Write; // without this, .write_all() does not exist on File
+
+const VENDOR_ID: u16 = 0x2022;
+const PRODUCT_ID: u16 = 0x0522;
+
+/// Finds the panel by USB ID rather than device number, because
+/// /dev/hidrawN is assigned in enumeration order and moves.
+fn find_hidraw() -&gt; Option&lt;PathBuf&gt; {
+    // HID_ID=0003:00002022:00000522 — eight hex digits per field, not four.
+    let needle = format!(":{VENDOR_ID:08X}:{PRODUCT_ID:08X}");
+
+    let mut nodes: Vec&lt;PathBuf&gt; = Vec::new();
+    for entry in fs::read_dir("/sys/class/hidraw").ok()?.flatten() {
+        let Ok(text) = fs::read_to_string(entry.path().join("device/uevent")) else {
+            continue;
+        };
+        if text.to_uppercase().contains(&amp;needle) {
+            nodes.push(Path::new("/dev").join(entry.file_name()));
+        }
+    }
+    nodes.sort();
+    nodes.into_iter().next()
+}
+
+/// Writes one HID output report. The leading zero is the report-ID byte,
+/// which the kernel strips because this descriptor declares no report IDs.
+/// One buffer, one write_all: hidraw maps each write() syscall to one report.
+fn send(file: &amp;mut File, packet: &amp;[u8; 12]) -&gt; std::io::Result&lt;()&gt; {
+    let mut buf = [0u8; 13];
+    buf[1..].copy_from_slice(packet);
+    file.write_all(&amp;buf)
+}</code></pre></div>
+  </div></details>
+</section>
+
+<section id="s6">
+  <h2><span class="sec-num">6</span>The loop</h2>
+  <p class="goal">Read both sensors, build, send, wait a second, repeat.</p>
+
+  <p>Mechanically this is <code>loop { … }</code> and
+  <code>thread::sleep(Duration::from_secs(1))</code>. That is the whole thing.</p>
+
+  <div class="call why"><span class="tag">Before you go looking for something fancier</span>
+  <p>One thread, one blocking sleep, no channels, no ticker abstraction, no
+  <code>tokio</code>. For a task that happens once a second this is not a compromise — it is the
+  correct and complete design, and anything else is strictly more code doing strictly more work.
+  Rust makes async so visible that beginners assume they are supposed to reach for it. Not
+  here.</p></div>
+
+  <div class="call why"><span class="tag">Error policy in a daemon</span>
+  <p>Inside the loop, errors are <strong>not</strong> propagated with <code>?</code>. A sensor
+  read that fails becomes a blank half of the panel and a line on stderr. If you let errors
+  escape the loop, the process exits, systemd restarts it, and you get a restart loop instead of
+  a recovery — worse than the original problem and harder to diagnose.</p>
+  <p>This is also where <code>.unwrap()</code> stops being acceptable. It is fine while
+  exploring; in a daemon a single transient error panics the process. Prefer
+  <code>.expect("some message")</code> over bare <code>.unwrap()</code> even in throwaway code,
+  so the panic tells you which one blew up.</p></div>
+
+  <div class="call reach"><span class="tag">Reach for</span>
+  <p><code>Option::as_deref()</code> to turn your <code>Option&lt;PathBuf&gt;</code> into an
+  <code>Option&lt;&amp;Path&gt;</code> without giving up ownership. And note that <code>?</code>
+  works on <code>Option</code> too, not just <code>Result</code> — which makes
+  &ldquo;no path, so no reading&rdquo; a single character.</p></div>
+
+  <div class="call check"><span class="tag">Checkpoint</span>
+  <p>Watch the panel for ten seconds; the numbers move. Cross-check against
+  <code>watch -n1 sensors</code>. Check <code>top</code> — CPU should be indistinguishable from
+  zero. If it is pegged, your <code>sleep</code> is missing or outside the loop.</p>
+  <label class="ck"><input type="checkbox" data-ck="rs6"> mark step done</label></div>
+
+  <details><summary>Reference implementation — step 6</summary><div class="details-body">
+  <div class="codewrap"><span class="label">src/main.rs</span>
+<pre data-lang="rust"><code>use std::thread;
+use std::time::Duration;
+
+/// Reads a sensor, turning any failure into a blanked half-panel.
+/// The `?` on an Option returns None early when there is no path at all.
+fn read_or_blank(path: Option&lt;&amp;Path&gt;) -&gt; Reading {
+    let path = path?;
+    match read_temp(path) {
+        Ok(c) =&gt; Some(c),
+        Err(e) =&gt; {
+            eprintln!("sensor: {e}");
+            None
+        }
+    }
+}
+
+fn describe(p: &amp;Option&lt;PathBuf&gt;) -&gt; String {
+    match p {
+        Some(p) =&gt; p.display().to_string(),
+        None =&gt; "none".to_string(),
+    }
+}
+
+fn main() -&gt; Result&lt;(), Box&lt;dyn Error&gt;&gt; {
+    let cpu = find_cpu();
+    let gpu = find_gpu();
+    eprintln!("cpu sensor: {}", describe(&amp;cpu));
+    eprintln!("gpu sensor: {}", describe(&amp;gpu));
+    if cpu.is_none() &amp;&amp; gpu.is_none() {
+        return Err("no CPU or GPU sensor found under /sys/class/hwmon".into());
+    }
+
+    let path = find_hidraw().ok_or("no device 2022:0522 found")?;
+    let mut file = OpenOptions::new().write(true).open(&amp;path)?;
+    eprintln!("opened {}", path.display());
+
+    loop {
+        let packet = build_packet(
+            read_or_blank(cpu.as_deref()),
+            read_or_blank(gpu.as_deref()),
+        );
+        if let Err(e) = send(&amp;mut file, &amp;packet) {
+            eprintln!("write: {e}"); // step 7 makes this recover
+        }
+        thread::sleep(Duration::from_secs(1));
+    }
+}</code></pre></div>
+  </div></details>
+</section>
+
+<section id="s7">
+  <h2><span class="sec-num">7</span>Survive a replug</h2>
+  <p class="goal">When the device goes away and comes back, reopen it instead of dying or
+  writing forever to a dead descriptor.</p>
+
+  <p>The program now needs to remember something between iterations — whether the device is
+  open — which is what a <code>struct</code> with an <code>impl</code> block is for. Hold an
+  <code>Option&lt;File&gt;</code>: <code>None</code> means &ldquo;not open&rdquo;, and dropping
+  the <code>File</code> back to <code>None</code> is how you close it.</p>
+
+  <div class="call why"><span class="tag">You never call close()</span>
+  <p>Rust closes the file when the <code>File</code> value is dropped — when it goes out of
+  scope, or when you overwrite it with <code>None</code>. There is no
+  <code>defer f.Close()</code> because there is nothing to defer. This is RAII, and it is one of
+  the genuinely nicer things about the language.</p>
+  <p>Learn it now, and also learn its one limit, which you will meet in step 8: <strong>drop
+  does not run when a process is killed by a signal.</strong></p></div>
+
+  <div class="call gotcha"><span class="tag">Gotcha · two <code>&amp;mut self</code> borrows at once</span>
+  <p>The natural way to write <code>send</code> does not compile:</p>
+  <div class="codewrap"><span class="label">does not compile</span>
+<pre data-lang="rust"><code>let file = self.ensure_open()?;        // borrows self mutably
+if let Err(e) = file.write_all(&amp;buf) {
+    self.file = None;                 // second mutable borrow — E0499
+    return Err(Box::new(e));
+}</code></pre></div>
+  <p>The first borrow is still alive when you try to touch <code>self</code> again. The fix is to
+  end the borrow before you need <code>self</code> back: do the write, store the
+  <em>result</em> in a local, and only then modify <code>self</code>. The reference does exactly
+  that, and it is worth writing the broken version once so you recognise E0499 later.</p></div>
+
+  <div class="call gotcha"><span class="tag">Gotcha · re-run discovery, don't reuse the path</span>
+  <p>After a replug the device may come back as a different <code>/dev/hidrawN</code>. Reopening
+  the remembered path can get you a working handle on somebody else's keyboard. Discovery is
+  cheap; run it again.</p></div>
+
+  <div class="call check"><span class="tag">Checkpoint</span>
+  <p>Make the device go away — physically unplug the internal header, or do it in software:</p>
+  <div class="codewrap"><span class="label">shell</span>
+<pre><code># the USB path comes from HID_PHYS in the uevent file — here, 1-7
+echo 0 | sudo tee /sys/bus/usb/devices/1-7/authorized
+sleep 2
+echo 1 | sudo tee /sys/bus/usb/devices/1-7/authorized</code></pre></div>
+  <p>The program should log the failure, reopen a couple of seconds later, and never exit. If it
+  panics, you still have an <code>.unwrap()</code> in the loop body.</p>
+  <label class="ck"><input type="checkbox" data-ck="rs7"> mark step done</label></div>
+
+  <details><summary>Reference implementation — step 7</summary><div class="details-body">
+  <div class="codewrap"><span class="label">src/main.rs</span>
+<pre data-lang="rust"><code>/// Owns the open device, reopening it after an unplug.
+struct Display {
+    file: Option&lt;File&gt;,
+}
+
+impl Display {
+    fn new() -&gt; Self {
+        Display { file: None }
+    }
+
+    fn ensure_open(&amp;mut self) -&gt; Result&lt;(), Box&lt;dyn Error&gt;&gt; {
+        if self.file.is_some() {
+            return Ok(());
+        }
+        // Re-discover rather than reusing a remembered path: the node number
+        // can change across a replug.
+        let path = find_hidraw().ok_or("no device 2022:0522 found")?;
+        let file = OpenOptions::new()
+            .write(true)
+            .open(&amp;path)
+            .map_err(|e| format!("open {}: {e}", path.display()))?;
+        eprintln!("opened {}", path.display());
+        self.file = Some(file);
+        Ok(())
+    }
+
+    fn send(&amp;mut self, packet: &amp;[u8; 12]) -&gt; Result&lt;(), Box&lt;dyn Error&gt;&gt; {
+        self.ensure_open()?;
+        let mut buf = [0u8; 13];
+        buf[1..].copy_from_slice(packet);
+
+        // Store the result first so the borrow of self.file ends here.
+        // Writing `if let Err(e) = self.file.as_mut()...` and then assigning
+        // to self.file inside the block is E0499.
+        let result = self.file.as_mut().unwrap().write_all(&amp;buf);
+        if let Err(e) = result {
+            self.file = None; // dropping the File closes the fd
+            return Err(Box::new(e));
+        }
+        Ok(())
+    }
+}</code></pre></div>
+  </div></details>
+</section>
+
+<section id="s8">
+  <h2><span class="sec-num">8</span>Graceful shutdown</h2>
+  <p class="goal">On SIGINT or SIGTERM, blank the panel and exit cleanly instead of leaving a
+  stale number frozen on your case.</p>
+
+  <p>First, see the problem. Run the service, then stop it, and watch the panel keep whatever
+  number was there at the moment the process died. Nothing refreshes that display but you.</p>
+
+  <div class="call gotcha"><span class="tag">The one place Rust is worse than Go</span>
+  <p><strong>Rust's standard library has no signal handling. None, at any level.</strong> There
+  is no equivalent of Go's <code>os/signal</code>. Ctrl-C takes the default SIGINT disposition
+  and your process dies instantly.</p>
+  <p>And the RAII you learned in step 7 does not save you: <strong><code>Drop</code> does not run
+  when a process is killed by a signal.</strong> Cleanup code in a destructor is simply skipped.
+  This is worth internalising — it is a real limit on a pattern that otherwise feels
+  bulletproof.</p></div>
+
+  <p>You have three genuine options, and it is worth understanding that adding a crate is not
+  automatically the answer:</p>
+
+  <div class="tablewrap"><table>
+    <thead><tr><th>Option</th><th>Cost</th><th>Verdict</th></tr></thead>
+    <tbody>
+      <tr><td><code>signal-hook</code></td><td>One dependency (plus <code>libc</code>), safe API</td><td><strong>Recommended.</strong> Handles both signals, works in the foreground and under systemd</td></tr>
+      <tr><td><code>ctrlc</code></td><td>One dependency; needs its <code>termination</code> feature enabled for SIGTERM</td><td>Simpler API, easy to configure wrongly and then only catch Ctrl-C</td></tr>
+      <tr><td>systemd <code>ExecStopPost=</code></td><td><strong>Zero dependencies</strong></td><td>Have systemd run your binary again with a <code>--blank</code> flag after the service stops. Arguably the most Unix-native answer, and it does nothing for Ctrl-C in a terminal</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="call reach"><span class="tag">Reach for</span>
+  <p><code>cargo add signal-hook</code> — your first external dependency, at step 8, which is
+  itself worth noticing. Then
+  <code>signal_hook::flag::register(SIGTERM, Arc::clone(&amp;stop))</code>, where
+  <code>stop</code> is an <code>Arc&lt;AtomicBool&gt;</code>.</p>
+  <p>Treat that type as documented boilerplate rather than a concurrency lecture. The reasoning
+  in one sentence: the signal handler runs outside your normal control flow, so the flag has to
+  be shared (<code>Arc</code>) and safe to touch from two places at once
+  (<code>AtomicBool</code>). <code>Ordering::Relaxed</code> is sufficient for a single flag.</p></div>
+
+  <div class="call gotcha"><span class="tag">Gotcha · a one-second sleep is a one-second shutdown</span>
+  <p>If your loop sleeps for a full second, a Ctrl-C lands mid-sleep and nothing happens until it
+  finishes. Under systemd that is a sluggish stop; in a terminal it feels broken.</p>
+  <p>Sleep in short slices and check the flag between them — ten 100&nbsp;ms sleeps instead of one
+  1&nbsp;s sleep. It is three extra lines and the shutdown becomes instant.</p></div>
+
+  <div class="call check"><span class="tag">Checkpoint</span>
+  <p>Foreground, Ctrl-C: the panel shows <code>--.-</code> within about a second and the process
+  exits 0 — check with <code>echo $?</code>. Then <code>kill -TERM</code> the PID and confirm
+  identical behaviour.</p>
+  <p>Now the instructive one: <code>kill -KILL</code> it. The panel keeps its stale reading,
+  because SIGKILL cannot be caught by anything and no destructor runs. That is not a bug in your
+  program — it is the step-7 RAII lesson meeting its limit, and it is worth seeing once.</p>
+  <label class="ck"><input type="checkbox" data-ck="rs8"> mark step done</label></div>
+
+  <details><summary>Reference implementation — step 8</summary><div class="details-body">
+  <div class="codewrap"><span class="label">Cargo.toml</span>
+<pre><code>[dependencies]
+signal-hook = "0.4"</code></pre></div>
+  <div class="codewrap"><span class="label">src/main.rs — main, revised</span>
+<pre data-lang="rust"><code>use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+
+fn main() -&gt; Result&lt;(), Box&lt;dyn Error&gt;&gt; {
+    let cpu = find_cpu();
+    let gpu = find_gpu();
+    eprintln!("cpu sensor: {}", describe(&amp;cpu));
+    eprintln!("gpu sensor: {}", describe(&amp;gpu));
+    if cpu.is_none() &amp;&amp; gpu.is_none() {
+        return Err("no CPU or GPU sensor found under /sys/class/hwmon".into());
+    }
+
+    // The handler runs outside normal control flow, so the flag must be
+    // shared (Arc) and safe to touch concurrently (AtomicBool).
+    let stop = Arc::new(AtomicBool::new(false));
+    signal_hook::flag::register(signal_hook::consts::SIGTERM, Arc::clone(&amp;stop))?;
+    signal_hook::flag::register(signal_hook::consts::SIGINT, Arc::clone(&amp;stop))?;
+
+    let mut display = Display::new();
+
+    while !stop.load(Ordering::Relaxed) {
+        let packet = build_packet(
+            read_or_blank(cpu.as_deref()),
+            read_or_blank(gpu.as_deref()),
+        );
+        if let Err(e) = display.send(&amp;packet) {
+            eprintln!("display: {e}");
+        }
+        // Sleep in slices so shutdown doesn't wait out a full second.
+        for _ in 0..10 {
+            if stop.load(Ordering::Relaxed) {
+                break;
+            }
+            thread::sleep(Duration::from_millis(100));
+        }
+    }
+
+    eprintln!("shutting down, blanking panel");
+    let _ = display.send(&amp;build_packet(None, None)); // best effort
+    Ok(())
+}</code></pre></div>
+  </div></details>
+</section>
+
+<section id="s9">
+  <h2><span class="sec-num">9</span>Ship it</h2>
+  <p class="goal">A release binary, a udev rule, a systemd unit, and a panel that comes back by
+  itself after a reboot.</p>
+
+  <div class="codewrap"><span class="label">shell</span>
+<pre><code>cargo build --release
+ls -l target/release/antec-display
+ldd target/release/antec-display    # libc and friends, no interpreter</code></pre></div>
+
+  <p>Release builds are where the overflow-check difference from step 1 lives, so
+  <strong>run <code>cargo test --release</code> too</strong> — you want both profiles green
+  before this becomes a service that starts at boot.</p>
+
+  <p>The repo already has a <a href="99-antec-display.rules">udev rule</a> and a
+  <a href="antec-display.service">systemd unit</a> written for the Python daemon. Reuse both;
+  only <code>ExecStart</code> changes. The unit's hardening is worth reading rather than copying
+  blind — <code>ProtectSystem=strict</code> makes the filesystem read-only except
+  <code>/dev</code>, <code>/proc</code> and <code>/sys</code>, which is exactly this program's
+  access and nothing more.</p>
+
+  <div class="codewrap"><span class="label">shell</span>
+<pre><code>sudo install -m0755 target/release/antec-display /usr/local/bin/antec-display
+sudo cp 99-antec-display.rules /etc/udev/rules.d/
+sudo cp antec-display.service /etc/systemd/system/
+sudo sed -i 's|^ExecStart=.*|ExecStart=/usr/local/bin/antec-display|' \
+  /etc/systemd/system/antec-display.service
+sudo udevadm control --reload-rules &amp;&amp; sudo udevadm trigger --subsystem-match=hidraw
+sudo systemctl daemon-reload
+sudo systemctl enable --now antec-display</code></pre></div>
+
+  <div class="call why"><span class="tag">You do not need a logging crate</span>
+  <p>Under systemd, anything on stdout or stderr is captured by journald with timestamps and
+  metadata. <code>eprintln!</code> is genuinely sufficient — no <code>log</code>, no
+  <code>env_logger</code>, no <code>tracing</code>. Demonstrate it to yourself with
+  <code>journalctl -u</code> and the temptation goes away.</p>
+  <p>The same restraint applies to <code>clap</code> for a couple of flags and
+  <code>serde</code> for config you do not have. Your dependency count for this whole project is
+  one.</p></div>
+
+  <div class="call reach"><span class="tag">Optional, if you want the practice</span>
+  <p><code>std::env::args()</code> for a few flags — <code>--once</code>, <code>--dry-run</code>
+  to print hex instead of writing, <code>--device</code> to override discovery — and
+  <code>std::env::var</code> for <code>ANTEC_CPU_SENSOR</code>-style overrides, which returns a
+  <code>Result</code> you can <code>.ok()</code> into an <code>Option</code>. Deliberately not
+  <code>clap</code>.</p>
+  <p>If error messages start annoying you, that is the moment <code>anyhow</code> earns its
+  place: <code>.context(…)</code> attaches the file path to an error without you writing
+  <code>map_err(|e| format!(…))</code> every time. Add it when you feel the pain, not
+  before.</p></div>
+
+  <div class="call check"><span class="tag">Checkpoint</span>
+  <p><code>systemctl status antec-display</code> is clean, and
+  <code>journalctl -u antec-display -f</code> shows your two startup lines naming the chosen
+  sensors — which also proves <code>eprintln!</code> reaches the journal with no logging
+  crate.</p>
+  <p>Restart twice. <code>systemctl stop</code> and confirm the panel blanks rather than
+  freezing, which is step 8 working through systemd's SIGTERM.</p>
+  <p>Then reboot. If it finds the right hidraw node and the right hwmon directories on a machine
+  where the numbering has shifted, steps 3 through 5 earned their keep — and you have written a
+  real Rust program that runs on your machine whether or not you are looking at it.</p>
+  <label class="ck"><input type="checkbox" data-ck="rs9"> mark step done</label></div>
+
+  <div class="mobile-next">
+    <a class="nextlink" href="go.html">
+      <span class="lang">Now build it in Go →</span>
+      <span class="sub">Same program, same nine steps</span></a>
+  </div>
+</section>
+
+</main>
+
+<footer class="footer">
+  <p>Reference code verified against rustc 1.97.1 on Linux 7.1.4 — builds clean and all tests
+  pass in both debug and release profiles. Protocol details on the
+  <a href="foundations.html">foundations page</a>.</p>
+</footer>
+
+</div>
+
+<script>
+(function(){
+  var root=document.documentElement, btn=document.getElementById('themeToggle');
+  function store(k,v){ try{ localStorage.setItem(k,v); }catch(e){} }
+  function load(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }
+
+  var s=load('antec-theme'); if(s) root.setAttribute('data-theme',s);
+  btn.addEventListener('click',function(){
+    var dark = root.getAttribute('data-theme')==='dark' ||
+      (!root.getAttribute('data-theme') && matchMedia('(prefers-color-scheme: dark)').matches);
+    var next = dark ? 'light' : 'dark';
+    root.setAttribute('data-theme',next); store('antec-theme',next);
+  });
+
+  var KW = {
+    go:"break case chan const continue default defer else fallthrough for func go goto if import interface map package range return select struct switch type var nil true false",
+    rust:"as break const continue crate dyn else enum extern false fn for if impl in let loop match mod move mut pub ref return static struct trait true type unsafe use where while self Self"
+  };
+  function esc(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  function highlight(code, lang){
+    var re = new RegExp(
+      "(\\/\\/[^\\n]*|\\/\\*[\\s\\S]*?\\*\\/)"
+      + "|(\"(?:[^\"\\\\\\n]|\\\\.)*\"|`[^`]*`)"
+      + "|\\b(0[xX][0-9a-fA-F_]+|\\d[\\d_]*(?:\\.\\d+)?)"
+      + "|\\b(" + KW[lang].split(" ").join("|") + ")\\b"
+      + "|([A-Za-z_][A-Za-z0-9_]*!)"
+      + "|\\b([A-Z][A-Za-z0-9_]*)\\b", "g");
+    var out="", last=0, m;
+    while((m=re.exec(code))!==null){
+      out += esc(code.slice(last,m.index));
+      var cls = m[1]?"tok-com":m[2]?"tok-str":m[3]?"tok-num":m[4]?"tok-kw":m[5]?"tok-mac":"tok-typ";
+      out += '<span class="'+cls+'">'+esc(m[0])+'</span>';
+      last = re.lastIndex;
+    }
+    return out + esc(code.slice(last));
+  }
+  document.querySelectorAll('pre[data-lang]').forEach(function(pre){
+    var lang=pre.getAttribute('data-lang'); if(!KW[lang]) return;
+    var c=pre.querySelector('code')||pre;
+    c.innerHTML = highlight(c.textContent, lang);
+  });
+
+  function fallbackCopy(text,cb){
+    var ta=document.createElement('textarea');
+    ta.value=text; ta.setAttribute('readonly','');
+    ta.style.cssText='position:absolute;left:-9999px';
+    document.body.appendChild(ta); ta.select();
+    try{ document.execCommand('copy'); cb(); }catch(e){}
+    document.body.removeChild(ta);
+  }
+  document.querySelectorAll('.codewrap').forEach(function(w){
+    var pre=w.querySelector('pre'); if(!pre) return;
+    var b=document.createElement('button');
+    b.type='button'; b.className='copy'; b.textContent='Copy';
+    b.addEventListener('click',function(){
+      var t=pre.innerText;
+      var done=function(){ b.textContent='Copied'; b.classList.add('done');
+        setTimeout(function(){ b.textContent='Copy'; b.classList.remove('done'); },1400); };
+      if(navigator.clipboard && navigator.clipboard.writeText){
+        navigator.clipboard.writeText(t).then(done,function(){ fallbackCopy(t,done); });
+      } else { fallbackCopy(t,done); }
+    });
+    w.appendChild(b);
+  });
+
+  var boxes=document.querySelectorAll('.ck input[data-ck]');
+  var prog=document.getElementById('prog');
+  function sync(){
+    var n=0;
+    boxes.forEach(function(b){
+      if(b.checked) n++;
+      var sec=b.closest('section');
+      if(sec){
+        var link=document.querySelector('.rail a[href="#'+sec.id+'"]');
+        if(link) link.classList.toggle('done', b.checked);
+      }
+    });
+    if(prog) prog.textContent = n + ' / ' + boxes.length;
+  }
+  boxes.forEach(function(b){
+    if(load('antec-'+b.dataset.ck)==='1') b.checked=true;
+    b.addEventListener('change',function(){
+      store('antec-'+b.dataset.ck, b.checked?'1':'0'); sync();
+    });
+  });
+  sync();
+})();
+</script>
+</body>
+</html>

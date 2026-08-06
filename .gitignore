@@ -1,0 +1,16 @@
+# Antec's iUnity installer. Not ours to redistribute, and well over GitHub's
+# file size limit. Nothing in this repo needs it — the protocol is documented
+# in README.md and foundations.html.
+*.msi
+
+__pycache__/
+*.py[cod]
+
+# Build output from working through the Go and Rust tutorials
+target/
+/antec-display
+
+# Scratch dumps from hexdumping packets
+*.bin
+
+.claude/settings.local.json

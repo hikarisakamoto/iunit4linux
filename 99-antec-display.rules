@@ -1,0 +1,4 @@
+# Antec case temperature display (DINK HID device).
+# uaccess hands the node to the user logged in at the local seat, so the
+# script can be run without root for testing.
+KERNEL=="hidraw*", ATTRS{idVendor}=="2022", ATTRS{idProduct}=="0522", TAG+="uaccess", MODE="0660", GROUP="input"

@@ -1,0 +1,1187 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Build it in Go — Antec panel</title>
+<style>
+:root{
+  --bg:#F1F3F5; --surface:#FFFFFF; --surface-2:#E7EAEE; --sunken:#DDE1E7;
+  --text:#171B21; --dim:#5A626E; --faint:#858D99;
+  --line:#D2D7DE; --line-soft:#E3E7EC;
+  --accent:#0092B5; --accent-ink:#00728E; --accent-wash:#E2F1F6;
+  --hdr:#5E7387; --cmd:#6A6398; --cpu:#B4741B; --gpu:#2C7169; --sum:#A03C36;
+  --ok:#2C7169; --warn:#A0632B; --bad:#A03C36;
+  --shadow:0 1px 2px rgba(20,25,32,.06), 0 8px 24px -12px rgba(20,25,32,.18);
+  --mono:ui-monospace,"SF Mono","JetBrains Mono","Fira Code","DejaVu Sans Mono",monospace;
+  --sans:system-ui,"Segoe UI",Roboto,"Noto Sans","DejaVu Sans",sans-serif;
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --bg:#0F1216; --surface:#161A20; --surface-2:#1D222A; --sunken:#0B0E12;
+    --text:#E3E7EC; --dim:#98A1AE; --faint:#6C7683;
+    --line:#282E37; --line-soft:#1F242C;
+    --accent:#4FC3E8; --accent-ink:#79D3F0; --accent-wash:#10222A;
+    --hdr:#8AA3BA; --cmd:#9A92CC; --cpu:#D9A048; --gpu:#5AAFA3; --sum:#D2726A;
+    --ok:#5AAFA3; --warn:#D09A54; --bad:#D2726A;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 30px -14px rgba(0,0,0,.7);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0F1216; --surface:#161A20; --surface-2:#1D222A; --sunken:#0B0E12;
+  --text:#E3E7EC; --dim:#98A1AE; --faint:#6C7683;
+  --line:#282E37; --line-soft:#1F242C;
+  --accent:#4FC3E8; --accent-ink:#79D3F0; --accent-wash:#10222A;
+  --hdr:#8AA3BA; --cmd:#9A92CC; --cpu:#D9A048; --gpu:#5AAFA3; --sum:#D2726A;
+  --ok:#5AAFA3; --warn:#D09A54; --bad:#D2726A;
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 30px -14px rgba(0,0,0,.7);
+}
+:root[data-theme="light"]{
+  --bg:#F1F3F5; --surface:#FFFFFF; --surface-2:#E7EAEE; --sunken:#DDE1E7;
+  --text:#171B21; --dim:#5A626E; --faint:#858D99;
+  --line:#D2D7DE; --line-soft:#E3E7EC;
+  --accent:#0092B5; --accent-ink:#00728E; --accent-wash:#E2F1F6;
+  --hdr:#5E7387; --cmd:#6A6398; --cpu:#B4741B; --gpu:#2C7169; --sum:#A03C36;
+  --ok:#2C7169; --warn:#A0632B; --bad:#A03C36;
+  --shadow:0 1px 2px rgba(20,25,32,.06), 0 8px 24px -12px rgba(20,25,32,.18);
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:1.5rem}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{animation:none!important;transition:none!important}}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);
+  font-size:16.5px;line-height:1.65;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1180px;margin:0 auto;padding:0 1.5rem 6rem;
+  display:grid;grid-template-columns:minmax(0,1fr);gap:0}
+@media (min-width:1000px){.wrap{grid-template-columns:15.5rem minmax(0,1fr);gap:3.5rem;align-items:start}}
+.masthead{grid-column:1/-1;padding:3.5rem 0 2rem;border-bottom:1px solid var(--line)}
+.backlink{font-family:var(--mono);font-size:.75rem;letter-spacing:.06em;color:var(--dim);
+  text-decoration:none;display:inline-block;margin-bottom:1.5rem}
+.backlink:hover{color:var(--accent-ink)}
+.kicker{font-family:var(--mono);font-size:.72rem;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--accent-ink);margin:0 0 1rem}
+h1{font-family:var(--mono);font-size:clamp(1.9rem,4.2vw,2.9rem);line-height:1.1;
+  letter-spacing:-.02em;font-weight:600;margin:0 0 1rem;text-wrap:balance}
+.standfirst{font-size:1.12rem;color:var(--dim);max-width:62ch;margin:0}
+.masthead-meta{display:flex;flex-wrap:wrap;gap:.5rem;margin-top:1.75rem}
+.chip{font-family:var(--mono);font-size:.74rem;letter-spacing:.04em;padding:.3rem .6rem;
+  border:1px solid var(--line);border-radius:2px;background:var(--surface);color:var(--dim)}
+.rail{position:sticky;top:1.5rem;padding:2.5rem 0;font-size:.9rem;display:none}
+@media (min-width:1000px){.rail{display:block}}
+.rail h2{font-family:var(--mono);font-size:.7rem;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--faint);margin:0 0 .9rem;font-weight:600;display:flex;justify-content:space-between}
+.rail h2 .prog{color:var(--accent-ink);font-variant-numeric:tabular-nums}
+.rail ol{list-style:none;margin:0 0 2rem;padding:0;display:flex;flex-direction:column;gap:.1rem}
+.rail a{display:block;padding:.3rem .6rem;color:var(--dim);text-decoration:none;
+  border-left:2px solid var(--line-soft);line-height:1.4}
+.rail a:hover{color:var(--text);border-left-color:var(--accent);background:var(--surface)}
+.rail a:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.rail a.done{color:var(--faint)}
+.rail a.done .num::after{content:" ✓";color:var(--ok)}
+.rail .num{font-family:var(--mono);font-size:.74rem;color:var(--faint);margin-right:.5rem}
+.nextlink{display:block;padding:.7rem .8rem;background:var(--surface);border:1px solid var(--line);
+  border-left-width:3px;border-left-color:#B3411F;border-radius:3px;text-decoration:none;color:var(--text)}
+.nextlink:hover{box-shadow:var(--shadow)}
+.nextlink:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.nextlink .lang{font-family:var(--mono);font-weight:600;font-size:.9rem;display:block}
+.nextlink .sub{font-size:.78rem;color:var(--dim)}
+main{padding:2.5rem 0;min-width:0}
+section{padding:2.75rem 0;border-bottom:1px solid var(--line-soft)}
+section:first-of-type{padding-top:1rem}
+h2{font-family:var(--mono);font-size:1.4rem;font-weight:600;letter-spacing:-.01em;
+  margin:0 0 .8rem;text-wrap:balance;scroll-margin-top:1.5rem}
+h2 .sec-num{color:var(--accent);font-weight:400;margin-right:.7rem}
+h3{font-family:var(--mono);font-size:1.02rem;font-weight:600;margin:2rem 0 .5rem}
+p{margin:0 0 1rem;max-width:68ch}
+ul,ol.body{max-width:66ch;padding-left:1.3rem;margin:0 0 1rem}
+li{margin-bottom:.45rem}
+a{color:var(--accent-ink);text-underline-offset:2px}
+a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+code{font-family:var(--mono);font-size:.87em;background:var(--surface-2);
+  padding:.1em .35em;border-radius:2px;word-break:break-word}
+strong{font-weight:650}
+.goal{font-size:1.05rem;color:var(--text);max-width:64ch;margin-bottom:1.5rem;
+  padding-left:1rem;border-left:3px solid var(--accent)}
+.codewrap{position:relative;margin:0 0 1.5rem}
+.codewrap .label{font-family:var(--mono);font-size:.68rem;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--faint);display:block;margin-bottom:.4rem}
+pre{margin:0;background:var(--sunken);border:1px solid var(--line);border-radius:3px;
+  padding:1rem 1.1rem;overflow-x:auto;font-family:var(--mono);font-size:.83rem;line-height:1.62}
+pre code{background:none;padding:0;font-size:inherit}
+.copy{position:absolute;top:1.6rem;right:.5rem;font-family:var(--mono);font-size:.68rem;
+  letter-spacing:.06em;text-transform:uppercase;background:var(--surface);color:var(--dim);
+  border:1px solid var(--line);border-radius:2px;padding:.25rem .5rem;cursor:pointer;opacity:0;
+  transition:opacity .12s}
+.codewrap:hover .copy,.copy:focus-visible{opacity:1}
+.copy:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.copy.done{color:var(--ok);border-color:var(--ok)}
+.tok-com{color:var(--faint);font-style:italic}
+.tok-str{color:var(--gpu)}
+.tok-num{color:var(--sum)}
+.tok-kw{color:var(--cmd);font-weight:600}
+.tok-mac{color:var(--accent-ink)}
+.tok-typ{color:var(--hdr)}
+.call{border:1px solid var(--line);border-left-width:3px;background:var(--surface);
+  border-radius:3px;padding:1rem 1.15rem;margin:0 0 1.5rem;max-width:70ch}
+.call > :last-child{margin-bottom:0}
+.call .tag{font-family:var(--mono);font-size:.68rem;letter-spacing:.13em;text-transform:uppercase;
+  font-weight:600;display:block;margin-bottom:.4rem}
+.call.gotcha{border-left-color:var(--bad)} .call.gotcha .tag{color:var(--bad)}
+.call.why{border-left-color:var(--hdr)} .call.why .tag{color:var(--hdr)}
+.call.check{border-left-color:var(--ok)} .call.check .tag{color:var(--ok)}
+.call.reach{border-left-color:var(--accent)} .call.reach .tag{color:var(--accent-ink)}
+.call.wrong{border-left-color:var(--warn)} .call.wrong .tag{color:var(--warn)}
+.call ul{margin-bottom:0}
+.ck{display:flex;align-items:center;gap:.5rem;margin-top:.9rem;font-family:var(--mono);
+  font-size:.75rem;letter-spacing:.05em;text-transform:uppercase;color:var(--faint);cursor:pointer}
+.ck input{accent-color:var(--ok);width:1rem;height:1rem;cursor:pointer}
+.ck input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.tablewrap{overflow-x:auto;margin:0 0 1.5rem;border:1px solid var(--line);border-radius:3px}
+table{border-collapse:collapse;width:100%;font-size:.88rem;background:var(--surface)}
+th,td{text-align:left;padding:.55rem .8rem;border-bottom:1px solid var(--line-soft);vertical-align:top}
+th{font-family:var(--mono);font-size:.7rem;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--faint);font-weight:600;background:var(--surface-2);white-space:nowrap}
+tr:last-child td{border-bottom:none}
+td code{background:none;padding:0}
+.mono-col{font-family:var(--mono);white-space:nowrap;font-variant-numeric:tabular-nums}
+details{border:1px solid var(--line);border-radius:3px;background:var(--surface);
+  margin:0 0 1.5rem;overflow:hidden}
+details > summary{cursor:pointer;padding:.7rem 1rem;font-family:var(--mono);font-size:.8rem;
+  letter-spacing:.03em;color:var(--dim);list-style:none;user-select:none}
+details > summary::-webkit-details-marker{display:none}
+details > summary::before{content:"▸ ";color:var(--accent)}
+details[open] > summary::before{content:"▾ "}
+details[open] > summary{border-bottom:1px solid var(--line-soft);color:var(--text)}
+details > summary:hover{color:var(--text);background:var(--surface-2)}
+details > summary:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.details-body{padding:1rem 1.1rem .1rem}
+.theme-toggle{position:fixed;top:1rem;right:1rem;z-index:10;font-family:var(--mono);
+  font-size:.7rem;letter-spacing:.1em;text-transform:uppercase;background:var(--surface);
+  color:var(--dim);border:1px solid var(--line);border-radius:2px;padding:.4rem .7rem;cursor:pointer}
+.theme-toggle:hover{color:var(--text);border-color:var(--accent)}
+.theme-toggle:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.footer{grid-column:1/-1;padding:3rem 0 0;color:var(--faint);font-size:.85rem;
+  border-top:1px solid var(--line);margin-top:2rem}
+.mobile-next{display:block;margin:2rem 0 0}
+@media (min-width:1000px){.mobile-next{display:none}}
+</style>
+</head>
+<body>
+<button class="theme-toggle" id="themeToggle" type="button">Theme</button>
+
+<div class="wrap">
+
+<header class="masthead">
+  <a class="backlink" href="foundations.html">← Foundations: the hardware and the protocol</a>
+  <p class="kicker">Antec panel · Go</p>
+  <h1>Build it in Go</h1>
+  <p class="standfirst">Nine steps from an empty module to a systemd service showing your CPU and
+  GPU temperatures on the case. This page assumes you can already read and write Go, so it skips
+  the language and spends its words on the parts this particular project makes awkward.</p>
+  <div class="masthead-meta">
+    <span class="chip">stdlib only</span>
+    <span class="chip">no cgo</span>
+    <span class="chip">~200 lines</span>
+    <span class="chip">go 1.26.5 verified</span>
+  </div>
+</header>
+
+<nav class="rail" aria-label="Contents">
+  <h2><span>Steps</span><span class="prog" id="prog">0 / 9</span></h2>
+  <ol>
+    <li><a href="#s1" data-step="1"><span class="num">1</span>The packet builder</a></li>
+    <li><a href="#s2" data-step="2"><span class="num">2</span>Read one temperature</a></li>
+    <li><a href="#s3" data-step="3"><span class="num">3</span>Find the sensors</a></li>
+    <li><a href="#s4" data-step="4"><span class="num">4</span>Pick the right GPU</a></li>
+    <li><a href="#s5" data-step="5"><span class="num">5</span>Find the device, write</a></li>
+    <li><a href="#s6" data-step="6"><span class="num">6</span>The loop</a></li>
+    <li><a href="#s7" data-step="7"><span class="num">7</span>Survive a replug</a></li>
+    <li><a href="#s8" data-step="8"><span class="num">8</span>Graceful shutdown</a></li>
+    <li><a href="#s9" data-step="9"><span class="num">9</span>Ship it</a></li>
+  </ol>
+  <h2><span>Or</span></h2>
+  <a class="nextlink" href="rust.html">
+    <span class="lang">Rust</span><span class="sub">Same program, from zero</span></a>
+</nav>
+
+<main>
+
+<section id="intro">
+  <h2>Before you start</h2>
+  <p>Read <a href="foundations.html">the foundations page</a> first if you have not. In
+  particular, do the <a href="foundations.html#warmup">shell warm-up</a> — driving the panel
+  with <code>printf</code> and <code>dd</code> takes thirty seconds and permanently separates
+  &ldquo;my Go is wrong&rdquo; from &ldquo;my understanding of the device is wrong&rdquo;.</p>
+
+  <p>Everything here is standard library. No modules to add, no cgo, no build tags. That is
+  worth stating up front because searching for &ldquo;USB HID Go&rdquo; will push you toward
+  <code>gousb</code> or <code>karalabe/hid</code>, both of which drag in a C toolchain and
+  neither of which you need.</p>
+
+  <div class="codewrap"><span class="label">shell</span>
+<pre><code>mkdir -p ~/src/antec-display &amp;&amp; cd ~/src/antec-display
+go mod init antec-display</code></pre></div>
+
+  <h3>How each step is laid out</h3>
+  <p>Every step states a goal, points at the specific standard-library calls worth reaching for,
+  warns you about what will go wrong, and gives you a way to prove it worked. A reference
+  implementation sits behind a collapsed block at the end. It is there for when a step will not
+  come together — opening it immediately works, but you will learn less than if you fight it
+  for ten minutes first.</p>
+</section>
+
+<section id="s1">
+  <h2><span class="sec-num">1</span>The packet builder</h2>
+  <p class="goal">Turn two temperatures into the twelve bytes from the protocol table. No files,
+  no device, no I/O at all — and therefore fully testable before you own any of the hard parts.</p>
+
+  <p>You need two things: a function that splits one temperature into its three digit bytes, and
+  a function that assembles the full packet and checksums it. Both halves of the panel can be
+  absent, so your digit function needs a way to express &ldquo;no reading&rdquo; and return
+  <code>0xEE 0xEE 0xEE</code>. Go has no option type; a small struct carrying a value and a
+  validity flag reads better here than a <code>*float64</code>, and it keeps
+  <code>buildPacket</code> down to two parameters.</p>
+
+  <div class="call reach"><span class="tag">Reach for</span>
+  <p><code>[12]byte</code> and <code>[3]byte</code> — fixed arrays, not slices. The packet is
+  always exactly twelve bytes and saying so in the type removes a whole class of bug.
+  <code>copy()</code> to move digit triples into place. <code>%X</code> and
+  <code>%02X</code> for eyeballing output.</p></div>
+
+  <div class="call gotcha"><span class="tag">Gotcha · you cannot slice a returned array</span>
+  <p><code>copy(p[5:8], digits(cpu)[:])</code> does not compile:
+  <em>invalid operation: cannot slice unaddressable value</em>. A function's return value has no
+  address, and slicing an array requires one. Assign it to a variable first, then slice that.
+  This catches nearly everyone once.</p></div>
+
+  <div class="call why"><span class="tag">The checksum, and why Go makes this easy</span>
+  <p><code>0x55 + 0xAA + 0x01</code> already exceeds a byte. Accumulate in a <code>byte</code>
+  and Go wraps silently — which, because the spec wants exactly <code>sum &amp; 0xFF</code>,
+  happens to give the right answer. It works by luck rather than by design, so accumulate in a
+  <code>uint32</code> and convert once at the end. It reads as deliberate, and it is the same
+  code you would have to write in Rust, where the sloppy version panics.</p></div>
+
+  <div class="call wrong"><span class="tag">Reaching for the wrong tool</span>
+  <p>Do not build this with <code>strconv</code>, <code>fmt.Sprintf</code> or a
+  <code>string</code>. The digits are <em>values</em>, not characters — 44.3&nbsp;°C is
+  <code>0x04 0x04 0x03</code>, not <code>"443"</code>. Anything that produces text is the wrong
+  shape.</p></div>
+
+  <div class="call check"><span class="tag">Checkpoint</span>
+  <p>Write a table test with the two vectors from the protocol page. They are exact:</p>
+  <div class="codewrap"><span class="label">expected</span>
+<pre><code>44.3 / 42.0   ->  55 AA 01 01 06 04 04 03 04 02 00 18
+blank / blank ->  55 AA 01 01 06 EE EE EE EE EE EE 9B</code></pre></div>
+  <p>Add edge cases while you are there: <code>0.0</code> gives <code>00 00 00</code>,
+  <code>99.9</code> gives <code>09 09 09</code>, <code>150.0</code> clamps to
+  <code>09 09 09</code>, and <code>-5.0</code> clamps to <code>00 00 00</code>. Finish with a
+  self-consistency assertion that byte 11 really equals the low byte of the sum of bytes 0–10 —
+  it will catch a typo in your header long after you have stopped looking at it.</p>
+  <label class="ck"><input type="checkbox" data-ck="go1"> mark step done</label></div>
+
+  <details><summary>Reference implementation — step 1</summary><div class="details-body">
+  <div class="codewrap"><span class="label">packet.go</span>
+<pre data-lang="go"><code>package main
+
+// Reading is a temperature that may or may not be available. Go has no
+// option type; an explicit Valid flag beats a *float64 here because the
+// zero value (absent) is the safe default.
+type Reading struct {
+	Celsius float64
+	Valid   bool
+}
+
+var blank = [3]byte{0xEE, 0xEE, 0xEE}
+
+// digits splits a reading into tens, ones and tenths.
+func digits(r Reading) [3]byte {
+	if !r.Valid {
+		return blank
+	}
+	c := r.Celsius
+	if c &lt; 0 {
+		c = 0
+	}
+	if c &gt; 99.9 {
+		c = 99.9
+	}
+	v := int(c*10 + 0.5) // round, then work in tenths
+	return [3]byte{byte(v / 100), byte(v / 10 % 10), byte(v % 10)}
+}
+
+func buildPacket(cpu, gpu Reading) [12]byte {
+	var p [12]byte
+	p[0], p[1] = 0x55, 0xAA
+	p[2], p[3], p[4] = 0x01, 0x01, 0x06
+
+	// Assign first: digits(cpu)[:] would not compile.
+	c, g := digits(cpu), digits(gpu)
+	copy(p[5:8], c[:])
+	copy(p[8:11], g[:])
+
+	var sum uint32
+	for _, b := range p[:11] {
+		sum += uint32(b)
+	}
+	p[11] = byte(sum)
+	return p
+}</code></pre></div>
+  <div class="codewrap"><span class="label">packet_test.go</span>
+<pre data-lang="go"><code>package main
+
+import "testing"
+
+func TestBuildPacket(t *testing.T) {
+	cases := []struct {
+		name     string
+		cpu, gpu Reading
+		want     [12]byte
+	}{
+		{"vector", Reading{44.3, true}, Reading{42.0, true},
+			[12]byte{0x55, 0xAA, 0x01, 0x01, 0x06, 4, 4, 3, 4, 2, 0, 0x18}},
+		{"blank", Reading{}, Reading{},
+			[12]byte{0x55, 0xAA, 0x01, 0x01, 0x06,
+				0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0x9B}},
+	}
+	for _, tc := range cases {
+		got := buildPacket(tc.cpu, tc.gpu)
+		if got != tc.want {
+			t.Errorf("%s:\n got %X\nwant %X", tc.name, got, tc.want)
+		}
+		var sum uint32
+		for _, b := range got[:11] {
+			sum += uint32(b)
+		}
+		if byte(sum) != got[11] {
+			t.Errorf("%s: checksum %02X does not match body", tc.name, got[11])
+		}
+	}
+}
+
+func TestDigitsClamp(t *testing.T) {
+	cases := []struct {
+		in   float64
+		want [3]byte
+	}{
+		{0.0, [3]byte{0, 0, 0}},
+		{99.9, [3]byte{9, 9, 9}},
+		{150.0, [3]byte{9, 9, 9}},
+		{-5.0, [3]byte{0, 0, 0}},
+	}
+	for _, tc := range cases {
+		if got := digits(Reading{tc.in, true}); got != tc.want {
+			t.Errorf("digits(%v) = %v, want %v", tc.in, got, tc.want)
+		}
+	}
+}</code></pre></div>
+  </div></details>
+</section>
+
+<section id="s2">
+  <h2><span class="sec-num">2</span>Read one temperature</h2>
+  <p class="goal">Get <code>47.1</code> out of <code>/sys/class/hwmon/hwmon4/temp1_input</code>.
+  Hardcode the path — you are going to break it deliberately in step 3.</p>
+
+  <p>Three lines of real work: read the file, trim it, parse it, divide by a thousand. The value
+  of doing it as its own step is that it forces you to decide how errors travel through this
+  program before there is anything complicated in the way.</p>
+
+  <div class="call reach"><span class="tag">Reach for</span>
+  <p><code>os.ReadFile</code> — not <code>os.Open</code> and a <code>Scanner</code>; these files
+  are a handful of bytes. <code>strings.TrimSpace</code>, <code>strconv.Atoi</code>, and
+  <code>fmt.Errorf</code> with <code>%w</code> to wrap.</p></div>
+
+  <div class="call gotcha"><span class="tag">Gotcha · include the path in every error</span>
+  <p><code>os.ReadFile</code> returns a <code>*PathError</code>, so its message names the file.
+  <code>strconv.Atoi</code>'s does not — you get
+  <code>strconv.Atoi: parsing "47125\n": invalid syntax</code>, and once this program is opening
+  a dozen sysfs paths that is not enough to act on. Wrap both with the path:
+  <code>fmt.Errorf("read %s: %w", path, err)</code>. You will be reading these messages out of
+  <code>journalctl</code> at some point, with no debugger.</p></div>
+
+  <div class="call gotcha"><span class="tag">Gotcha · the trailing newline</span>
+  <p>The file contains <code>47125\n</code>. Forget <code>TrimSpace</code> and
+  <code>Atoi</code> fails with <em>invalid syntax</em>, which does not mention whitespace and
+  reads like the file is corrupt. Trim on read, always, as a reflex.</p></div>
+
+  <div class="call gotcha"><span class="tag">Gotcha · integer division eats the decimal</span>
+  <p><code>47125 / 1000</code> is <code>47</code>, silently. You need
+  <code>float64(milli) / 1000</code>. Worth noticing that you could skip floats entirely and
+  work in tenths — <code>(milli + 50) / 100</code> gives you 471 directly, which is exactly what
+  the digit splitter wants and has no rounding subtleties at all. Either is fine; pick on
+  purpose.</p></div>
+
+  <div class="call check"><span class="tag">Checkpoint</span>
+  <p><code>cat /sys/class/hwmon/hwmon4/temp1_input</code> prints something like
+  <code>47125</code>; your program prints <code>47.1</code>. Cross-check against
+  <code>sensors</code> and its <code>Tctl</code> line.</p>
+  <p>Then break it on purpose twice: point it at a path that does not exist, and at
+  <code>.../name</code>, which exists but will not parse. Both should produce one clean line
+  naming the file. If either produces a panic or a bare <em>invalid syntax</em>, fix that now —
+  this is the error plumbing every later step rides on.</p>
+  <label class="ck"><input type="checkbox" data-ck="go2"> mark step done</label></div>
+
+  <details><summary>Reference implementation — step 2</summary><div class="details-body">
+  <div class="codewrap"><span class="label">sensors.go</span>
+<pre data-lang="go"><code>package main
+
+import (
+	"fmt"
+	"os"
+	"strconv"
+	"strings"
+)
+
+// readSysfs reads a small sysfs file and trims the trailing newline.
+// Every read in this program goes through here so the trim can't be forgotten.
+func readSysfs(path string) (string, error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return "", err // *PathError already names the file
+	}
+	return strings.TrimSpace(string(b)), nil
+}
+
+// readTemp returns degrees Celsius from a hwmon tempN_input file.
+func readTemp(path string) (float64, error) {
+	s, err := readSysfs(path)
+	if err != nil {
+		return 0, fmt.Errorf("read temperature: %w", err)
+	}
+	milli, err := strconv.Atoi(s)
+	if err != nil {
+		return 0, fmt.Errorf("parse %s: %w", path, err)
+	}
+	return float64(milli) / 1000, nil
+}</code></pre></div>
+  </div></details>
+</section>
+
+<section id="s3">
+  <h2><span class="sec-num">3</span>Find the sensors</h2>
+  <p class="goal">Replace the hardcoded path with a scan: given a driver name like
+  <code>k10temp</code> and a preferred label like <code>Tctl</code>, return the matching
+  <code>tempN_input</code> path.</p>
+
+  <p>Before you write it, earn the step. Reboot, or run
+  <code>sudo udevadm trigger</code>, then check whether <code>hwmon4</code> is still
+  <code>k10temp</code>. Numbering is assigned in driver-probe order and moves. If your program
+  quietly starts showing your network card's temperature, that is why.</p>
+
+  <p>The shape: enumerate <code>/sys/class/hwmon/hwmon*</code>, read each <code>name</code>,
+  keep the ones matching the driver you want, enumerate their <code>temp*_input</code> files,
+  read the matching <code>_label</code> beside each, and return the one whose label you asked
+  for — falling back to the first input if none matched.</p>
+
+  <div class="call reach"><span class="tag">Reach for</span>
+  <p><code>filepath.Glob</code> handles both enumerations and saves you a manual
+  <code>ReadDir</code>-and-filter. <code>filepath.Join</code> to build paths.
+  <code>strings.TrimSuffix</code> to turn <code>temp1_input</code> into
+  <code>temp1_label</code>. <code>strings.EqualFold</code> so label matching is not
+  case-sensitive.</p></div>
+
+  <div class="call gotcha"><span class="tag">Gotcha · do not filter on IsDir</span>
+  <p>The highest-severity silent failure in this project. Every entry under
+  <code>/sys/class/hwmon</code> is a <strong>symlink</strong> into
+  <code>/sys/devices/…</code>, and <code>os.ReadDir</code> returns <code>DirEntry</code> values
+  whose <code>IsDir()</code> reports the type of the link, not its target. Filter on
+  <code>e.IsDir()</code> and you get zero results, no error, and nothing to grep for.</p>
+  <p><code>filepath.Glob</code> sidesteps this entirely, which is a good reason to prefer it
+  here. If you do use <code>ReadDir</code>, either stat the resolved path with
+  <code>os.Stat</code> (which follows links) or simply try to read <code>name</code> and skip
+  entries where that fails.</p></div>
+
+  <div class="call gotcha"><span class="tag">Gotcha · numbering has holes, and sorts wrong</span>
+  <p><code>k10temp</code> here exposes <code>temp1</code>, <code>temp3</code>, <code>temp4</code>
+  — there is no <code>temp2</code>. Any <code>for i := 1; i &lt;= n; i++</code> loop is wrong.
+  Enumerate, never count.</p>
+  <p>And <code>filepath.Glob</code> returns results sorted lexically, so
+  <code>hwmon10</code> sorts before <code>hwmon2</code>. It does not bite on this machine, which
+  only reaches <code>hwmon8</code>, but do not write code that depends on the order.</p></div>
+
+  <div class="call gotcha"><span class="tag">Gotcha · labels are optional</span>
+  <p><code>spd5118</code> and <code>ath12k_hwmon</code> have no <code>_label</code> files at all.
+  A missing label is normal. Treat the read failure as an empty string and move on; do not
+  propagate it as an error, or a RAM sensor you do not care about will abort your whole
+  scan.</p></div>
+
+  <div class="call check"><span class="tag">Checkpoint</span>
+  <p>Print everything you found — directory, driver name, and each input with its label — and
+  diff it against the shell:</p>
+  <div class="codewrap"><span class="label">shell</span>
+<pre><code>for d in /sys/class/hwmon/hwmon*; do echo "$d $(cat $d/name)"; done</code></pre></div>
+  <p>Two specific things to confirm. Did you find <code>k10temp</code>'s <code>temp3</code> and
+  <code>temp4</code> despite there being no <code>temp2</code>? And did you get any results at
+  all — an empty list means the symlink trap.</p>
+  <label class="ck"><input type="checkbox" data-ck="go3"> mark step done</label></div>
+
+  <details><summary>Reference implementation — step 3</summary><div class="details-body">
+  <div class="codewrap"><span class="label">sensors.go (continued)</span>
+<pre data-lang="go"><code>import (
+	"path/filepath"
+	"sort"
+)
+
+type sensor struct {
+	path  string // .../tempN_input
+	label string // "Tctl", "edge", … or "" when the device exposes none
+}
+
+// tempInputs lists every temperature sensor in one hwmon directory.
+func tempInputs(dir string) []sensor {
+	// Glob, not ReadDir: entries under /sys/class/hwmon are symlinks and
+	// DirEntry.IsDir() reports false for all of them.
+	matches, err := filepath.Glob(filepath.Join(dir, "temp*_input"))
+	if err != nil {
+		return nil
+	}
+	sort.Strings(matches)
+
+	out := make([]sensor, 0, len(matches))
+	for _, p := range matches {
+		// A missing label file is normal, not an error.
+		label, _ := readSysfs(strings.TrimSuffix(p, "_input") + "_label")
+		out = append(out, sensor{path: p, label: label})
+	}
+	return out
+}
+
+// hwmonByDriver returns every hwmon directory belonging to a driver.
+func hwmonByDriver(driver string) []string {
+	dirs, _ := filepath.Glob("/sys/class/hwmon/hwmon*")
+	var out []string
+	for _, d := range dirs {
+		if name, err := readSysfs(filepath.Join(d, "name")); err == nil &amp;&amp; name == driver {
+			out = append(out, d)
+		}
+	}
+	return out
+}</code></pre></div>
+  </div></details>
+</section>
+
+<section id="s4">
+  <h2><span class="sec-num">4</span>Pick the right GPU</h2>
+  <p class="goal">Given two <code>amdgpu</code> instances, choose the discrete card and not the
+  integrated one.</p>
+
+  <p>A Ryzen desktop chip with integrated graphics gives you two <code>amdgpu</code> hwmon
+  directories. One is your RX 9070; the other is the iGPU sitting at idle forever. Pick wrong
+  and the panel is confidently, permanently useless.</p>
+
+  <div class="tablewrap"><table>
+    <thead><tr><th>Path</th><th>Inputs</th><th>Labels</th><th>Which</th></tr></thead>
+    <tbody>
+      <tr><td class="mono-col">hwmon2</td><td class="mono-col">3</td><td class="mono-col">edge, junction, mem</td><td><strong>Discrete</strong></td></tr>
+      <tr><td class="mono-col">hwmon3</td><td class="mono-col">1</td><td class="mono-col">edge</td><td>iGPU</td></tr>
+    </tbody>
+  </table></div>
+
+  <p>The heuristic: a discrete card reports edge, junction and memory; an integrated one reports
+  only edge. So among candidates for a driver, take the one with the most temperature inputs.
+  Fold this into the sensor finder from step 3 — the same rule is harmless for
+  <code>k10temp</code>, where there is only ever one instance.</p>
+
+  <div class="call why"><span class="tag">It's a heuristic, so say what you picked</span>
+  <p>This is a guess that happens to be right on every machine anyone has tested. It could be
+  wrong on yours. One <code>log.Printf</code> at startup naming the chosen paths turns a
+  baffling wrong number into a one-second diagnosis, and costs you a line.</p></div>
+
+  <div class="call check"><span class="tag">Checkpoint</span>
+  <p>Your finder should land on <code>hwmon4/temp1_input</code> (Tctl) for the CPU and
+  <code>hwmon2/temp1_input</code> (edge) for the GPU — <em>not</em> <code>hwmon3</code>. Confirm
+  the number is plausible against <code>sensors</code>, then load the GPU with something and
+  watch it move.</p>
+  <label class="ck"><input type="checkbox" data-ck="go4"> mark step done</label></div>
+
+  <details><summary>Reference implementation — step 4</summary><div class="details-body">
+  <div class="codewrap"><span class="label">sensors.go (continued)</span>
+<pre data-lang="go"><code>// findSensor picks a temperature input for a driver, preferring the first
+// label in preferred that exists. Among several instances of the same driver
+// (a discrete GPU and an iGPU both bind amdgpu) the one exposing the most
+// sensors wins — a discrete card reports edge+junction+mem, an iGPU only edge.
+func findSensor(driver string, preferred ...string) (string, bool) {
+	var best []sensor
+	for _, dir := range hwmonByDriver(driver) {
+		if s := tempInputs(dir); len(s) &gt; len(best) {
+			best = s
+		}
+	}
+	if len(best) == 0 {
+		return "", false
+	}
+	for _, want := range preferred {
+		for _, s := range best {
+			if strings.EqualFold(s.label, want) {
+				return s.path, true
+			}
+		}
+	}
+	return best[0].path, true
+}
+
+// findCPU and findGPU encode the per-vendor preferences in one place.
+func findCPU() (string, bool) {
+	if p, ok := findSensor("k10temp", "Tctl"); ok {
+		return p, true
+	}
+	return findSensor("coretemp", "Package id 0")
+}
+
+func findGPU() (string, bool) {
+	if p, ok := findSensor("amdgpu", "edge"); ok {
+		return p, true
+	}
+	return findSensor("nvidia")
+}</code></pre></div>
+  </div></details>
+</section>
+
+<section id="s5">
+  <h2><span class="sec-num">5</span>Find the device and write to it</h2>
+  <p class="goal">Locate your <code>/dev/hidrawN</code> by USB ID, then put a number on the panel
+  from your own code.</p>
+
+  <p>Two halves. Discovery is the same directory-scanning shape as step 3 with a different
+  matcher: walk <code>/sys/class/hidraw/*</code>, read each <code>device/uevent</code>, and look
+  for the <code>HID_ID</code> line. You already know how to do this — try it before opening the
+  solution.</p>
+
+  <div class="call gotcha"><span class="tag">Gotcha · eight hex digits, not four</span>
+  <p><code>HID_ID=0003:00002022:00000522</code>. The vendor and product fields are zero-padded to
+  <strong>eight</strong> digits. Searching for <code>"2022:0522"</code> matches nothing, silently.
+  Build the needle with <code>fmt.Sprintf(":%08X:%08X", vid, pid)</code> and compare
+  case-insensitively — the kernel writes lowercase hex.</p>
+  <p>This exact bug shipped in the first draft of the Python version in this repo.</p></div>
+
+  <p>The write half is where the two rules from the foundations page get enforced. Your buffer
+  is thirteen bytes — a leading <code>0x00</code> report ID, then the packet — and it goes out in
+  a single <code>Write</code>.</p>
+
+  <div class="call reach"><span class="tag">Reach for</span>
+  <p><code>os.OpenFile(path, os.O_WRONLY, 0)</code>. Not <code>os.Create</code>, which adds
+  <code>O_CREAT|O_TRUNC</code> — harmless on a character device but wrong, and it will fail
+  confusingly under the hardened systemd unit in step 9. Not <code>os.O_RDWR</code> either;
+  you never read from this device, and the IN endpoint would block if you tried.</p></div>
+
+  <div class="call wrong"><span class="tag">Reaching for the wrong tool</span>
+  <p><code>bufio.NewWriter</code> around the device. It is such a reflex that people add it
+  without thinking, and here it silently breaks the protocol: <code>hidraw</code> maps one
+  <code>write()</code> syscall to one HID report, so buffering can split your report or hold it
+  until a flush you forgot. <code>*os.File.Write</code> is already exactly one syscall. Use it
+  directly.</p>
+  <p>Same trap, different shape: writing the header and the body in two calls.</p></div>
+
+  <div class="call check"><span class="tag">Checkpoint</span>
+  <p>Aim at a scratch file before the real device — you need no root for this:</p>
+  <div class="codewrap"><span class="label">shell</span>
+<pre><code>$ ./antec-display --out /tmp/panel.bin
+$ wc -c /tmp/panel.bin
+13 /tmp/panel.bin
+$ hexdump -C /tmp/panel.bin
+00000000  00 55 aa 01 01 06 04 04  03 04 02 00 18</code></pre></div>
+  <p>Exactly 13 bytes. Zero means an unflushed buffer; 14 means a stray newline crept in.</p>
+  <p>Then the definitive test, against the real node:</p>
+  <div class="codewrap"><span class="label">shell</span>
+<pre><code>$ strace -e trace=write ./antec-display
+write(3, "\0U\252\1\1\6\4\4\3\4\2\0\30", 13) = 13</code></pre></div>
+  <p>One <code>write</code> of 13 bytes per packet. Seeing the syscall is better proof than
+  seeing the right number on the panel, because a torn report can still occasionally look
+  correct. If you get <em>permission denied</em>, that is the udev rule, not your code.</p>
+  <label class="ck"><input type="checkbox" data-ck="go5"> mark step done</label></div>
+
+  <details><summary>Reference implementation — step 5</summary><div class="details-body">
+  <div class="codewrap"><span class="label">device.go</span>
+<pre data-lang="go"><code>package main
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+)
+
+const (
+	vendorID  = 0x2022
+	productID = 0x0522
+)
+
+// findHidraw locates the panel by USB ID rather than by device number,
+// because /dev/hidrawN is assigned in enumeration order and moves.
+func findHidraw() (string, bool) {
+	// HID_ID=0003:00002022:00000522 — eight hex digits per field, not four.
+	needle := fmt.Sprintf(":%08X:%08X", vendorID, productID)
+
+	entries, err := os.ReadDir("/sys/class/hidraw")
+	if err != nil {
+		return "", false
+	}
+	for _, e := range entries {
+		uevent := filepath.Join("/sys/class/hidraw", e.Name(), "device", "uevent")
+		b, err := os.ReadFile(uevent)
+		if err != nil {
+			continue
+		}
+		if strings.Contains(strings.ToUpper(string(b)), needle) {
+			return filepath.Join("/dev", e.Name()), true
+		}
+	}
+	return "", false
+}
+
+// send writes one HID output report. The leading zero is the report-ID byte,
+// which the kernel strips because this descriptor declares no report IDs.
+// One buffer, one Write: hidraw maps each write() syscall to one report.
+func send(f *os.File, p [12]byte) error {
+	var buf [13]byte
+	copy(buf[1:], p[:])
+	n, err := f.Write(buf[:])
+	if err != nil {
+		return err
+	}
+	if n != len(buf) {
+		return fmt.Errorf("short write: %d of %d bytes", n, len(buf))
+	}
+	return nil
+}</code></pre></div>
+  </div></details>
+</section>
+
+<section id="s6">
+  <h2><span class="sec-num">6</span>The loop</h2>
+  <p class="goal">Read both sensors, build, send, wait a second, repeat. Now it is a program
+  rather than a script.</p>
+
+  <p>Mechanically trivial. The interesting decisions are about failure: a sensor read that fails
+  on one tick must not kill the process, and a missing sensor at startup must not stop the other
+  half of the panel from working.</p>
+
+  <div class="call reach"><span class="tag">Reach for</span>
+  <p><code>time.NewTicker(time.Second)</code> rather than <code>time.Sleep</code> in a loop.
+  Sleep drifts by however long your work took; a ticker fires on a fixed schedule. At 1&nbsp;Hz
+  nobody would notice, but the ticker also gives you a channel, which is what makes step 8's
+  <code>select</code> possible without restructuring anything.</p></div>
+
+  <div class="call why"><span class="tag">Error policy in a daemon</span>
+  <p>Inside the loop body, errors are not fatal. A sensor read that fails becomes a blank half
+  and a log line. Returning an error from the loop means the service exits, systemd restarts it,
+  and you get a restart loop instead of a recovery — which is worse than the original problem,
+  and harder to diagnose because the logs scroll.</p>
+  <p>Rate-limit your complaints, too. A permanently missing sensor should not write one line per
+  second to the journal forever.</p></div>
+
+  <div class="call check"><span class="tag">Checkpoint</span>
+  <p>Watch the panel for ten seconds; the numbers move. Cross-check against
+  <code>watch -n1 sensors</code>. Then check <code>top</code> — CPU should be indistinguishable
+  from zero. If it is pegged at 100%, your ticker is not in the loop or you are draining the
+  channel wrong.</p>
+  <label class="ck"><input type="checkbox" data-ck="go6"> mark step done</label></div>
+
+  <details><summary>Reference implementation — step 6</summary><div class="details-body">
+  <div class="codewrap"><span class="label">main.go</span>
+<pre data-lang="go"><code>package main
+
+import (
+	"log"
+	"os"
+	"time"
+)
+
+func readOrBlank(path string, ok bool) Reading {
+	if !ok {
+		return Reading{}
+	}
+	c, err := readTemp(path)
+	if err != nil {
+		log.Printf("sensor: %v", err)
+		return Reading{}
+	}
+	return Reading{Celsius: c, Valid: true}
+}
+
+func main() {
+	cpuPath, cpuOK := findCPU()
+	gpuPath, gpuOK := findGPU()
+	log.Printf("cpu sensor: %s", orNone(cpuPath, cpuOK))
+	log.Printf("gpu sensor: %s", orNone(gpuPath, gpuOK))
+	if !cpuOK &amp;&amp; !gpuOK {
+		log.Fatal("no CPU or GPU sensor found under /sys/class/hwmon")
+	}
+
+	devPath, found := findHidraw()
+	if !found {
+		log.Fatal("no device 2022:0522 found")
+	}
+	f, err := os.OpenFile(devPath, os.O_WRONLY, 0)
+	if err != nil {
+		log.Fatalf("open %s: %v", devPath, err)
+	}
+	defer f.Close()
+	log.Printf("opened %s", devPath)
+
+	tick := time.NewTicker(time.Second)
+	defer tick.Stop()
+	for range tick.C {
+		p := buildPacket(readOrBlank(cpuPath, cpuOK), readOrBlank(gpuPath, gpuOK))
+		if err := send(f, p); err != nil {
+			log.Printf("write: %v", err) // step 7 makes this recover
+		}
+	}
+}
+
+func orNone(path string, ok bool) string {
+	if !ok {
+		return "none"
+	}
+	return path
+}</code></pre></div>
+  </div></details>
+</section>
+
+<section id="s7">
+  <h2><span class="sec-num">7</span>Survive a replug</h2>
+  <p class="goal">When the device goes away and comes back, reopen it instead of dying or
+  spinning on a dead descriptor.</p>
+
+  <p>Right now a write error logs and then keeps writing to a file handle that will never work
+  again. Give the device a small piece of state — the open file and its path — with a method
+  that opens it if it is not already open, and a send that closes and forgets the handle on
+  error so the next tick re-discovers it.</p>
+
+  <div class="call gotcha"><span class="tag">Gotcha · re-run discovery, don't reuse the path</span>
+  <p>After a replug the device may well come back as a different <code>/dev/hidrawN</code>.
+  Reopening the remembered path gets you a working file handle for somebody else's keyboard.
+  Discovery is cheap; run it again.</p></div>
+
+  <div class="call gotcha"><span class="tag">Gotcha · defer in a retry loop</span>
+  <p><code>defer f.Close()</code> runs when the <em>function</em> returns, not when the loop
+  iteration ends. Put it inside a reconnect loop and every reopen leaks a descriptor until the
+  process exits. Close explicitly when you drop the handle.</p></div>
+
+  <div class="call why"><span class="tag">Back off</span>
+  <p>If the device is genuinely gone, retrying every second forever is fine and cheap. Retrying
+  in a tight loop with no delay is not — you will fill the journal in minutes. A couple of
+  seconds between attempts is plenty, and worth logging the first failure but not the
+  hundredth.</p></div>
+
+  <div class="call check"><span class="tag">Checkpoint</span>
+  <p>Make the device go away. Physically unplug the internal header, or do it in software:</p>
+  <div class="codewrap"><span class="label">shell</span>
+<pre><code># find the USB path from HID_PHYS in the uevent file — here, 1-7
+echo 0 | sudo tee /sys/bus/usb/devices/1-7/authorized
+sleep 2
+echo 1 | sudo tee /sys/bus/usb/devices/1-7/authorized</code></pre></div>
+  <p>The program should log the failure, log a reopen a couple of seconds later, and keep
+  running throughout. If it exits, the error is still escaping the loop.</p>
+  <label class="ck"><input type="checkbox" data-ck="go7"> mark step done</label></div>
+
+  <details><summary>Reference implementation — step 7</summary><div class="details-body">
+  <div class="codewrap"><span class="label">device.go (continued)</span>
+<pre data-lang="go"><code>// display owns the open device, reopening it after an unplug.
+type display struct {
+	f    *os.File
+	path string
+}
+
+func (d *display) ensureOpen() error {
+	if d.f != nil {
+		return nil
+	}
+	// Re-discover rather than reusing d.path: the node number can change
+	// across a replug.
+	path, found := findHidraw()
+	if !found {
+		return fmt.Errorf("no device %04X:%04X found", vendorID, productID)
+	}
+	f, err := os.OpenFile(path, os.O_WRONLY, 0)
+	if err != nil {
+		return fmt.Errorf("open %s: %w", path, err)
+	}
+	d.f, d.path = f, path
+	log.Printf("opened %s", path)
+	return nil
+}
+
+// close drops the handle. Explicit, not deferred: a defer inside a reconnect
+// loop would leak one descriptor per reopen.
+func (d *display) close() {
+	if d.f != nil {
+		d.f.Close()
+		d.f, d.path = nil, ""
+	}
+}
+
+func (d *display) send(p [12]byte) error {
+	if err := d.ensureOpen(); err != nil {
+		return err
+	}
+	if err := send(d.f, p); err != nil {
+		d.close() // force rediscovery on the next tick
+		return err
+	}
+	return nil
+}</code></pre></div>
+  </div></details>
+</section>
+
+<section id="s8">
+  <h2><span class="sec-num">8</span>Graceful shutdown</h2>
+  <p class="goal">On SIGINT or SIGTERM, blank the panel and exit cleanly instead of leaving a
+  stale number frozen on the case.</p>
+
+  <p>Nothing refreshes the display but you. Kill the process and whatever was last written stays
+  there indefinitely, which looks exactly like a hung machine. Send the blank vector on the way
+  out.</p>
+
+  <div class="call reach"><span class="tag">Reach for</span>
+  <p><code>signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)</code>,
+  then <code>select</code> over <code>ctx.Done()</code> and your ticker channel. This is the
+  modern form and it composes: you get a context you could pass to anything else that needs to
+  stop.</p></div>
+
+  <div class="call gotcha"><span class="tag">Gotcha · if you roll it manually, buffer the channel</span>
+  <p><code>signal.Notify</code> on an unbuffered channel <em>drops</em> signals when nobody is
+  receiving at that instant. <code>make(chan os.Signal, 1)</code>. The runtime does not block to
+  deliver, and <code>go vet</code> will tell you about this one.</p></div>
+
+  <div class="call gotcha"><span class="tag">Gotcha · defer does not run on os.Exit</span>
+  <p>Any cleanup behind a <code>defer</code> is skipped by <code>os.Exit</code>, and
+  <code>log.Fatal</code> calls <code>os.Exit</code> for you. If your blanking lives in a
+  <code>defer</code> and something later calls <code>log.Fatal</code>, the panel keeps its stale
+  reading. Blank explicitly on the shutdown path.</p></div>
+
+  <div class="call why"><span class="tag">Worth knowing before you read the Rust page</span>
+  <p>This step is about fifteen lines of standard library. Rust's standard library has no signal
+  handling at all — no <code>os/signal</code> equivalent, at any level. Doing this in Rust means
+  adding your first external crate, or pushing the problem out to systemd. It is the one place
+  in this project where Go is straightforwardly ahead.</p></div>
+
+  <div class="call check"><span class="tag">Checkpoint</span>
+  <p>Run it in the foreground and press Ctrl-C: the panel should show <code>--.-</code> within
+  about a second and the process should exit 0 — check with <code>echo $?</code>. Then
+  <code>kill -TERM</code> the PID and confirm identical behaviour.</p>
+  <p>Now the instructive one: <code>kill -KILL</code> it. The panel keeps its stale reading,
+  because SIGKILL cannot be caught by anything. That is not a bug in your program, and it is
+  worth seeing once so you know what it looks like.</p>
+  <label class="ck"><input type="checkbox" data-ck="go8"> mark step done</label></div>
+
+  <details><summary>Reference implementation — step 8</summary><div class="details-body">
+  <div class="codewrap"><span class="label">main.go (revised)</span>
+<pre data-lang="go"><code>package main
+
+import (
+	"context"
+	"log"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+)
+
+func main() {
+	log.SetFlags(0) // journald already timestamps every line
+
+	cpuPath, cpuOK := findCPU()
+	gpuPath, gpuOK := findGPU()
+	log.Printf("cpu sensor: %s", orNone(cpuPath, cpuOK))
+	log.Printf("gpu sensor: %s", orNone(gpuPath, gpuOK))
+	if !cpuOK &amp;&amp; !gpuOK {
+		log.Fatal("no CPU or GPU sensor found under /sys/class/hwmon")
+	}
+
+	ctx, stop := signal.NotifyContext(context.Background(),
+		os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	var d display
+	tick := time.NewTicker(time.Second)
+	defer tick.Stop()
+
+	for {
+		select {
+		case &lt;-ctx.Done():
+			log.Print("shutting down, blanking panel")
+			d.send(buildPacket(Reading{}, Reading{})) // best effort
+			d.close()
+			return
+
+		case &lt;-tick.C:
+			p := buildPacket(
+				readOrBlank(cpuPath, cpuOK),
+				readOrBlank(gpuPath, gpuOK),
+			)
+			if err := d.send(p); err != nil {
+				log.Printf("display: %v", err)
+				// Back off so a missing device doesn't flood the journal.
+				select {
+				case &lt;-ctx.Done():
+				case &lt;-time.After(2 * time.Second):
+				}
+			}
+		}
+	}
+}</code></pre></div>
+  </div></details>
+</section>
+
+<section id="s9">
+  <h2><span class="sec-num">9</span>Ship it</h2>
+  <p class="goal">A static binary, a udev rule, a systemd unit, and a panel that comes back by
+  itself after a reboot.</p>
+
+  <div class="codewrap"><span class="label">shell</span>
+<pre><code>CGO_ENABLED=0 go build -ldflags="-s -w" -o antec-display .
+ldd antec-display     # "not a dynamic executable"</code></pre></div>
+
+  <p><code>CGO_ENABLED=0</code> is the point of the exercise: one file, no interpreter, no shared
+  libraries, nothing to install alongside it. Compare that against the Python version in this
+  repo, which needs a working Python 3 on the box forever.</p>
+
+  <p>The repo already has a <a href="99-antec-display.rules">udev rule</a> and a
+  <a href="antec-display.service">systemd unit</a> written for the Python daemon. Reuse both —
+  only <code>ExecStart</code> changes. The unit's hardening is worth reading rather than
+  copying blind: <code>ProtectSystem=strict</code> makes the whole filesystem read-only except
+  <code>/dev</code>, <code>/proc</code> and <code>/sys</code>, which is exactly the access this
+  program needs and nothing else.</p>
+
+  <div class="codewrap"><span class="label">shell</span>
+<pre><code>sudo install -m0755 antec-display /usr/local/bin/antec-display
+sudo cp 99-antec-display.rules /etc/udev/rules.d/
+sudo cp antec-display.service /etc/systemd/system/
+sudo sed -i 's|^ExecStart=.*|ExecStart=/usr/local/bin/antec-display|' \
+  /etc/systemd/system/antec-display.service
+sudo udevadm control --reload-rules &amp;&amp; sudo udevadm trigger --subsystem-match=hidraw
+sudo systemctl daemon-reload
+sudo systemctl enable --now antec-display</code></pre></div>
+
+  <div class="call why"><span class="tag">You do not need a logging library</span>
+  <p>Under systemd, anything your process writes to stdout or stderr is captured by journald
+  with correct timestamps and metadata. <code>log.Printf</code> is genuinely sufficient — no
+  <code>zap</code>, no <code>logrus</code>, no <code>slog</code> handler configuration.
+  <code>log.SetFlags(0)</code> is worth setting so you do not print a timestamp next to
+  journald's own.</p></div>
+
+  <div class="call reach"><span class="tag">Optional, if you want the practice</span>
+  <p>A few flags via the <code>flag</code> package rather than <code>cobra</code>:
+  <code>--out</code> to write to a file instead of the device (you probably built this in step
+  5), <code>--once</code> to send one packet and exit, <code>--interval</code>, and explicit
+  sensor path overrides for machines where the heuristic guesses wrong.</p></div>
+
+  <div class="call check"><span class="tag">Checkpoint</span>
+  <p><code>systemctl status antec-display</code> is clean and
+  <code>journalctl -u antec-display -f</code> shows your two startup lines naming the sensors it
+  chose — which also proves plain <code>log.Printf</code> reaches the journal.</p>
+  <p>Restart it twice. Then <code>systemctl stop</code> and confirm the panel blanks rather than
+  freezing — that is step 8 working through systemd's SIGTERM.</p>
+  <p>Then reboot. If it finds the right hidraw node and the right hwmon directories on a machine
+  where the numbering has shifted, steps 3 and 5 earned their keep.</p>
+  <label class="ck"><input type="checkbox" data-ck="go9"> mark step done</label></div>
+
+  <div class="mobile-next">
+    <a class="nextlink" href="rust.html">
+      <span class="lang">Now build it in Rust →</span>
+      <span class="sub">Same program, assumes you know none</span></a>
+  </div>
+</section>
+
+</main>
+
+<footer class="footer">
+  <p>Reference code verified against Go 1.26.5 on Linux 7.1.4. Protocol details on the
+  <a href="foundations.html">foundations page</a>.</p>
+</footer>
+
+</div>
+
+<script>
+(function(){
+  var root=document.documentElement, btn=document.getElementById('themeToggle');
+  function store(k,v){ try{ localStorage.setItem(k,v); }catch(e){} }
+  function load(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }
+
+  var s=load('antec-theme'); if(s) root.setAttribute('data-theme',s);
+  btn.addEventListener('click',function(){
+    var dark = root.getAttribute('data-theme')==='dark' ||
+      (!root.getAttribute('data-theme') && matchMedia('(prefers-color-scheme: dark)').matches);
+    var next = dark ? 'light' : 'dark';
+    root.setAttribute('data-theme',next); store('antec-theme',next);
+  });
+
+  /* ---- syntax highlighting ---- */
+  var KW = {
+    go:"break case chan const continue default defer else fallthrough for func go goto if import interface map package range return select struct switch type var nil true false",
+    rust:"as break const continue crate dyn else enum extern false fn for if impl in let loop match mod move mut pub ref return static struct trait true type unsafe use where while self Self"
+  };
+  function esc(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  function highlight(code, lang){
+    var re = new RegExp(
+      "(\\/\\/[^\\n]*|\\/\\*[\\s\\S]*?\\*\\/)"
+      + "|(\"(?:[^\"\\\\\\n]|\\\\.)*\"|`[^`]*`)"
+      + "|\\b(0[xX][0-9a-fA-F_]+|\\d[\\d_]*(?:\\.\\d+)?)"
+      + "|\\b(" + KW[lang].split(" ").join("|") + ")\\b"
+      + "|([A-Za-z_][A-Za-z0-9_]*!)"
+      + "|\\b([A-Z][A-Za-z0-9_]*)\\b", "g");
+    var out="", last=0, m;
+    while((m=re.exec(code))!==null){
+      out += esc(code.slice(last,m.index));
+      var cls = m[1]?"tok-com":m[2]?"tok-str":m[3]?"tok-num":m[4]?"tok-kw":m[5]?"tok-mac":"tok-typ";
+      out += '<span class="'+cls+'">'+esc(m[0])+'</span>';
+      last = re.lastIndex;
+    }
+    return out + esc(code.slice(last));
+  }
+  document.querySelectorAll('pre[data-lang]').forEach(function(pre){
+    var lang=pre.getAttribute('data-lang'); if(!KW[lang]) return;
+    var c=pre.querySelector('code')||pre;
+    c.innerHTML = highlight(c.textContent, lang);
+  });
+
+  /* ---- copy buttons ---- */
+  function fallbackCopy(text,cb){
+    var ta=document.createElement('textarea');
+    ta.value=text; ta.setAttribute('readonly','');
+    ta.style.cssText='position:absolute;left:-9999px';
+    document.body.appendChild(ta); ta.select();
+    try{ document.execCommand('copy'); cb(); }catch(e){}
+    document.body.removeChild(ta);
+  }
+  document.querySelectorAll('.codewrap').forEach(function(w){
+    var pre=w.querySelector('pre'); if(!pre) return;
+    var b=document.createElement('button');
+    b.type='button'; b.className='copy'; b.textContent='Copy';
+    b.addEventListener('click',function(){
+      var t=pre.innerText;
+      var done=function(){ b.textContent='Copied'; b.classList.add('done');
+        setTimeout(function(){ b.textContent='Copy'; b.classList.remove('done'); },1400); };
+      if(navigator.clipboard && navigator.clipboard.writeText){
+        navigator.clipboard.writeText(t).then(done,function(){ fallbackCopy(t,done); });
+      } else { fallbackCopy(t,done); }
+    });
+    w.appendChild(b);
+  });
+
+  /* ---- progress ---- */
+  var boxes=document.querySelectorAll('.ck input[data-ck]');
+  var prog=document.getElementById('prog');
+  function sync(){
+    var n=0;
+    boxes.forEach(function(b){
+      if(b.checked) n++;
+      var sec=b.closest('section');
+      if(sec){
+        var link=document.querySelector('.rail a[href="#'+sec.id+'"]');
+        if(link) link.classList.toggle('done', b.checked);
+      }
+    });
+    if(prog) prog.textContent = n + ' / ' + boxes.length;
+  }
+  boxes.forEach(function(b){
+    if(load('antec-'+b.dataset.ck)==='1') b.checked=true;
+    b.addEventListener('change',function(){
+      store('antec-'+b.dataset.ck, b.checked?'1':'0'); sync();
+    });
+  });
+  sync();
+})();
+</script>
+</body>
+</html>
