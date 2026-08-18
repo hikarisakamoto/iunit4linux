@@ -237,8 +237,9 @@ details > summary:focus-visible{outline:2px solid var(--accent);outline-offset:-
 <main>
 
 <section id="hardware">
-  <h2><span class="sec-num">01</span>What the panel actually is</h2>
-  <p class="lede">Not a driver project. Not a USB project, really. A file-writing project.</p>
+  <h2><span class="sec-num">01</span>What the panel is</h2>
+  <p class="lede">The kernel exposes the panel as a plain file. Driving it means writing
+  bytes to that file — no driver work, no USB stack.</p>
 
   <p>The temperature readout on the top I/O of the Performance 1 FT is a small display module
   wired to an internal USB 2.0 header on your motherboard. It enumerates as an ordinary
@@ -286,7 +287,7 @@ iSerial                 3 2015-03-21
   <p>Because the kernel has already claimed this device with <code>hid-generic</code>, libusb
   cannot simply talk to it. You must first <em>detach the kernel driver</em> from the interface.
   That costs you three things: a C toolchain and <code>libusb</code>/<code>libudev</code> headers
-  at build time, root at runtime, and — the one that actually matters — the physical toggle
+  at build time, root at runtime, and — the one that matters — the physical toggle
   button on your case's top I/O, which stops working while the interface is detached.</p>
 
   <p>Meanwhile the kernel is already exposing the device as a character device you can open
@@ -346,7 +347,7 @@ crw------- 1 root root 243, 0 Aug  6 21:42 /dev/hidraw0</code></pre></div>
 <section id="protocol">
   <h2><span class="sec-num">04</span>The protocol</h2>
 
-  <p class="lede">Twelve bytes, sent about once a second. That is the entire protocol.</p>
+  <p class="lede">The entire protocol is twelve bytes, sent about once a second.</p>
 
   <p>Here is a real packet — CPU at 44.3&nbsp;°C, GPU at 42.0&nbsp;°C — with each byte coloured
   by its role:</p>
@@ -452,8 +453,7 @@ blank   / blank     ->  55 AA 01 01 06  EE EE EE  EE EE EE  9B</code></pre></div
 <section id="warmup">
   <h2><span class="sec-num">06</span>Warm-up: light up the panel with no code at all</h2>
 
-  <p class="lede">Do this before you write a line of Go or Rust. It takes thirty seconds and it
-  will save you an evening.</p>
+  <p class="lede">Do this before you write a line of Go or Rust. It takes thirty seconds.</p>
 
   <p>You have a test vector and you know the write rules, so you already have everything needed
   to drive the display from a shell. Paste the 44.3/42.0 packet, with its leading zero:</p>
@@ -474,8 +474,8 @@ blank   / blank     ->  55 AA 01 01 06  EE EE EE  EE EE EE  9B</code></pre></div
   understanding of the device is wrong. This one command permanently eliminates the second
   one. If the panel lit up, the device works, the node is right, and your permissions are
   fine — so any later problem is in your code, and you can stop second-guessing the hardware.</p>
-  <p><code>bs=13 count=1</code> is not decoration. It forces <code>dd</code> to issue a single
-  13-byte write, which is rule two enforced by the tool.</p></div>
+  <p><code>bs=13 count=1</code> forces <code>dd</code> to issue a single 13-byte write — rule two,
+  enforced by the tool.</p></div>
 
   <p>If it did not light up, resolve that now rather than after you have written 200 lines.
   Check the node is really yours (<a href="#debug">section 10</a>) and that you used
@@ -583,7 +583,7 @@ Tctl</code></pre></div>
   <p>The cheap, reliable heuristic: a discrete card reports edge <em>and</em> junction
   <em>and</em> memory, an integrated one reports only edge. Pick the instance with the most
   temperature inputs. It is a heuristic rather than a guarantee, so print what you chose at
-  startup — one line in the log turns a mystery into a one-second diagnosis.</p>
+  startup — one log line makes a wrong pick diagnosable.</p>
 
   <div class="call why"><span class="tag">Design note · a missing sensor is not an error</span>
   <p>If you cannot find a GPU, do not abort. Send <code>0xEE 0xEE 0xEE</code> for that half and
@@ -614,9 +614,8 @@ ls -l /dev/hidraw0    # should now show your user via an ACL: crw-rw----+</code>
   the existing Python daemon does — the process reads a handful of sysfs files and writes one
   device node, and the unit file locks down everything else.</p>
 
-  <p><strong><code>sudo ./your-program</code> while developing.</strong> Works, but you will get
-  tired of it, and running a compiler's output as root on every iteration is a habit worth not
-  forming. Install the udev rule.</p>
+  <p><strong><code>sudo ./your-program</code> while developing.</strong> Works, but running a
+  compiler's output as root on every iteration gets old fast. Install the udev rule.</p>
 
   <div class="call gotcha"><span class="tag">Gotcha · permission errors look like bugs</span>
   <p>The first time you point your program at the real device you are quite likely to get a
@@ -627,7 +626,7 @@ ls -l /dev/hidraw0    # should now show your user via an ACL: crw-rw----+</code>
 <section id="debug">
   <h2><span class="sec-num">10</span>Debugging toolkit</h2>
 
-  <p>Six commands cover essentially every problem you will hit. Learn them before you need them.</p>
+  <p>Six commands cover every problem you are likely to hit.</p>
 
   <div class="tablewrap"><table>
     <thead><tr><th>Command</th><th>Answers</th></tr></thead>
@@ -659,9 +658,9 @@ HID_UNIQ=2015-03-21</code></pre></div>
   <p>This exact bug shipped in the first draft of the Python version in this repo. It fails with
   no error: discovery just quietly finds nothing.</p></div>
 
-  <p>Note that there are fifteen <code>hidraw</code> nodes on this machine, three of them
-  identical Logitech receivers and three identical DOIO keyboards. Scanning for your device by
-  ID is not a theoretical nicety; the numbering genuinely moves.</p>
+  <p>There are fifteen <code>hidraw</code> nodes on this machine, three of them identical
+  Logitech receivers and three identical DOIO keyboards. Scan for your device by ID; the
+  numbering moves.</p>
 </section>
 
 <section id="design">
@@ -682,7 +681,7 @@ HID_UNIQ=2015-03-21</code></pre></div>
       <tr><td class="mono-col">1</td><td>The packet builder</td><td>Pure functions, fully testable against the two vectors, no device needed</td></tr>
       <tr><td class="mono-col">2</td><td>Read one temperature</td><td>Hardcoded path. First file I/O, first error handling</td></tr>
       <tr><td class="mono-col">3</td><td>Find the sensors</td><td>Directory scanning; the symlink and newline traps land here</td></tr>
-      <tr><td class="mono-col">4</td><td>Pick the right GPU</td><td>Small, verifiable, and the one place iterators are obviously the right tool</td></tr>
+      <tr><td class="mono-col">4</td><td>Pick the right GPU</td><td>Small, verifiable, and the one place iterator chains fit best</td></tr>
       <tr><td class="mono-col">5</td><td>Find the device, write to it</td><td>First light from your own code</td></tr>
       <tr><td class="mono-col">6</td><td>The loop</td><td>Now it's a program rather than a script</td></tr>
       <tr><td class="mono-col">7</td><td>Survive a replug</td><td>Reopen on error instead of dying; keeps state, so it's where structs earn their place</td></tr>
@@ -706,7 +705,7 @@ HID_UNIQ=2015-03-21</code></pre></div>
     verified with no device access and no root.</li>
   </ul>
 
-  <div class="call reach"><span class="tag">Optional, and genuinely optional</span>
+  <div class="call reach"><span class="tag">Optional</span>
   <p>Some firmware revisions reject a write shorter than the declared 64-byte report. Yours
   does not appear to, but if the panel stays dark despite a byte-perfect 13-byte write, pad the
   packet out to 64 bytes with zeros and try again. Treat it as a stretch goal, not a step.</p></div>

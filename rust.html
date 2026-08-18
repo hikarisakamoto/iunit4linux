@@ -219,9 +219,9 @@ details > summary:focus-visible{outline:2px solid var(--accent);outline-offset:-
   from features this project does not use. Here is what you can ignore.</p>
 
   <h3>What you are allowed to skip</h3>
-  <p>This matters more than it sounds. Beginners stall because they try to learn Rust
-  front-to-back before writing anything. You will not need any of the following, at any point,
-  and you can close every browser tab about them:</p>
+  <p>Beginners stall because they try to learn Rust front-to-back before writing anything. You
+  will not need any of the following, at any point, and you can close every browser tab about
+  them:</p>
 
   <ul class="skiplist">
     <li><span class="no">skip</span><span><strong><code>async</code>/<code>await</code>, futures, tokio.</strong> This program is one thread that sleeps for a second. Async would be strictly worse.</span></li>
@@ -249,7 +249,8 @@ cargo run</code></pre></div>
   <p>That gives you <code>Cargo.toml</code> (the manifest, like <code>go.mod</code>),
   <code>src/main.rs</code>, and a <code>target/</code> directory for build output. The whole
   program will live in <code>main.rs</code> — around 200 lines, which is well within the range
-  where splitting into modules would cost more than it buys.</p>
+  where splitting into modules would cost more than it buys. Each step ends with a collapsed
+  reference implementation; try the step before opening it.</p>
 
   <div class="tablewrap"><table>
     <thead><tr><th>You know this from Go</th><th>In Rust</th></tr></thead>
@@ -262,7 +263,7 @@ cargo run</code></pre></div>
       <tr><td><code>[]byte</code></td><td><em>Three</em> types: <code>Vec&lt;u8&gt;</code> (owned, growable), <code>&amp;[u8]</code> (a borrowed view), <code>[u8; 12]</code> (fixed size, known at compile time)</td></tr>
       <tr><td><code>string</code></td><td><em>Two</em> types: <code>String</code> (owned) and <code>&amp;str</code> (borrowed). Both are validated UTF-8, which is exactly why <code>0xEE</code> cannot live in one.</td></tr>
       <tr><td>value vs pointer receivers</td><td><code>&amp;self</code> vs <code>&amp;mut self</code>. Maps almost perfectly — lean on this.</td></tr>
-      <tr><td>implicit interface satisfaction</td><td>Traits must be <em>imported</em> to be callable. This trips up every Go programmer exactly once, in step 5.</td></tr>
+      <tr><td>implicit interface satisfaction</td><td>Traits must be <em>imported</em> to be callable. See step 5.</td></tr>
       <tr><td><code>os/signal</code></td><td>Nothing in the standard library. See step 8.</td></tr>
     </tbody>
   </table></div>
@@ -272,8 +273,8 @@ cargo run</code></pre></div>
   <strong>bottom-up</strong>: the <code>help:</code> line at the end very often contains the
   literal fix. Two habits worth forming on day one:</p>
   <ul>
-    <li><code>cargo clippy</code> after every step. It is a free, tireless reviewer that catches
-    non-idiomatic code before a human would, and its suggestions are genuinely instructive.</li>
+    <li><code>cargo clippy</code> after every step. It catches non-idiomatic code and explains
+    the fix.</li>
     <li><code>rustc --explain E0502</code> for any error code you do not recognise — it prints a
     page-long explanation with examples.</li>
   </ul>
@@ -282,8 +283,7 @@ cargo run</code></pre></div>
   <p>Before writing any Rust, go and do the
   <a href="foundations.html#warmup">warm-up on the foundations page</a> — driving the panel with
   <code>printf</code> and <code>dd</code>. It takes thirty seconds. From then on, every failure
-  is definitely in your code, and when you are new to a language that certainty is worth a
-  lot.</p></div>
+  is definitely in your code.</p></div>
 </section>
 
 <section id="s1">
@@ -306,13 +306,12 @@ cargo run</code></pre></div>
   array as hex while you are poking at it.</p></div>
 
   <div class="call gotcha"><span class="tag">Gotcha · the checksum overflows, and Rust panics</span>
-  <p>The big one. <code>0x55 + 0xAA + 0x01 = 0x100</code> — your accumulator exceeds a byte on
+  <p><code>0x55 + 0xAA + 0x01 = 0x100</code> — your accumulator exceeds a byte on
   the third byte of every packet, before any temperature is involved.</p>
   <p>If you accumulate in a <code>u8</code>, a <strong>debug build panics</strong> with
   <em>attempt to add with overflow</em>, and a <strong>release build silently wraps</strong> —
   giving the correct answer, because the spec wants exactly that. So the bug presents as
-  &ldquo;my program only crashes when I'm developing, and works when I ship it&rdquo;, which is
-  backwards from every instinct you have.</p>
+  &ldquo;my program only crashes when I'm developing, and works when I ship it&rdquo;.</p>
   <p>Sum into a <code>u32</code> and narrow once at the end with <code>as u8</code>. (Go, for
   contrast, wraps silently in every build and you never notice.)</p></div>
 
@@ -326,7 +325,7 @@ cargo run</code></pre></div>
   <p>Do not build this as a <code>String</code>. Two independent reasons: the digits are
   <em>values</em>, not characters (44.3&nbsp;°C is <code>0x04</code>, not <code>b'4'</code>), and
   Rust's <code>String</code> is validated UTF-8, so <code>0xEE</code> cannot legally go in one at
-  all. The compiler will stop you, but it is worth knowing why.</p></div>
+  all. The compiler will stop you either way.</p></div>
 
   <div class="call check"><span class="tag">Checkpoint</span>
   <p>Write tests. In Rust they live in the same file, in a <code>#[cfg(test)] mod tests</code>
@@ -421,7 +420,7 @@ mod tests {
 
   <p>Read the file, trim it, parse it, divide by a thousand. Four operations, and two of them
   can fail — which makes this the step where you meet <code>Result</code> and the <code>?</code>
-  operator, the single most important thing to get comfortable with in Rust.</p>
+  operator, the core of Rust error handling.</p>
 
   <p><code>?</code> means &ldquo;if this failed, return the error from this function
   immediately; otherwise give me the value&rdquo;. It is <code>if err != nil { return err }</code>
@@ -438,8 +437,8 @@ mod tests {
   from reading and a <code>ParseIntError</code> from parsing — and <code>?</code> will not unify
   them on its own. <code>Box&lt;dyn Error&gt;</code> is a box that holds any of them.</p>
   <p>Treat it as provisional and do not go building a custom error <code>enum</code> with
-  <code>From</code> implementations. That is the fastest known route to deciding Rust error
-  handling is miserable, and you do not need it — this type carries the whole program.</p></div>
+  <code>From</code> implementations. You do not need one — this type carries the whole
+  program.</p></div>
 
   <div class="call gotcha"><span class="tag">Gotcha · the trailing newline</span>
   <p>The file really contains <code>47125\n</code>. Skip <code>.trim()</code> and
@@ -447,7 +446,7 @@ mod tests {
   whitespace and reads like the file is corrupt. Trim on read, as a reflex.</p></div>
 
   <div class="call gotcha"><span class="tag">Gotcha · you cannot return what <code>.trim()</code> gives you</span>
-  <p>This is your first real encounter with ownership, and it is worth slowing down for.</p>
+  <p>This is your first encounter with ownership.</p>
   <p><code>read_to_string</code> hands you a <code>String</code> that owns a heap buffer.
   <code>.trim()</code> hands back a <code>&amp;str</code> — a <em>view into that buffer</em>, not
   a copy. When the function returns, the <code>String</code> is dropped and the buffer freed, so
@@ -455,16 +454,14 @@ mod tests {
   variable</em>.</p>
   <p>The fix is <code>.trim().to_string()</code>, which allocates a fresh owned string. Coming
   from Go, where slicing a string is free, that feels wasteful. It is one small allocation per
-  second — irrelevant here, and it buys you a function whose return value has no strings
-  attached. <strong>Returning owned values everywhere is the reason you will never write a
-  lifetime annotation in this project.</strong></p></div>
+  second — irrelevant here. <strong>Returning owned values everywhere is the reason you will
+  never write a lifetime annotation in this project.</strong></p></div>
 
   <div class="call gotcha"><span class="tag">Gotcha · integer division eats the decimal</span>
   <p><code>47125 / 1000</code> is <code>47</code>. You need <code>milli as f32 / 1000.0</code>.
-  Worth noticing that you could avoid floats entirely — <code>(milli + 50) / 100</code> gives
+  You could also avoid floats entirely — <code>(milli + 50) / 100</code> gives
   471 tenths directly, which is exactly what the digit splitter wants, with no rounding
-  subtleties. Either is fine; the point is that Rust makes you choose, so choose on
-  purpose.</p></div>
+  subtleties. Either is fine; choose on purpose.</p></div>
 
   <div class="call check"><span class="tag">Checkpoint</span>
   <p><code>cat /sys/class/hwmon/hwmon4/temp1_input</code> prints something like
@@ -510,9 +507,9 @@ fn read_temp(path: &amp;Path) -&gt; Result&lt;f32, Box&lt;dyn Error&gt;&gt; {
   <p class="goal">Replace the hardcoded path with a scan: given a driver name like
   <code>k10temp</code>, find its <code>tempN_input</code> files and their labels.</p>
 
-  <p>Earn the step first. Reboot, or run <code>sudo udevadm trigger</code>, and check whether
-  <code>hwmon4</code> is still <code>k10temp</code>. The numbering is assigned in driver-probe
-  order and moves between boots.</p>
+  <p>Before writing it, check the premise: reboot, or run <code>sudo udevadm trigger</code>, and
+  check whether <code>hwmon4</code> is still <code>k10temp</code>. The numbering is assigned in
+  driver-probe order and moves between boots.</p>
 
   <p>The shape: read <code>/sys/class/hwmon</code>, and for each entry read its <code>name</code>
   file and keep the ones matching the driver you want. Then in each of those directories, find
@@ -532,20 +529,19 @@ fn read_temp(path: &amp;Path) -&gt; Result&lt;f32, Box&lt;dyn Error&gt;&gt; {
   can fail partway through. So you handle failure twice.</p>
   <p>Two idioms: <code>let entry = entry?;</code> inside the loop propagates each error, or
   <code>.flatten()</code> on the iterator silently drops failed entries. Flatten swallows errors,
-  which sounds bad and is actually right here — an unreadable entry in
+  and that is the right behaviour here — an unreadable entry in
   <code>/sys/class/hwmon</code> is one you did not want.</p></div>
 
   <div class="call gotcha"><span class="tag">Gotcha · never filter on <code>is_dir()</code></span>
-  <p>The highest-severity silent failure in this project, and the compiler is perfectly happy
-  with it.</p>
+  <p>This fails silently, and the compiler is happy with it.</p>
   <p>Every entry under <code>/sys/class/hwmon</code> and <code>/sys/class/hidraw</code> is a
   <strong>symlink</strong> into <code>/sys/devices/…</code>. <code>DirEntry::file_type()</code>
   reports the type of the <em>link</em>, so <code>.is_dir()</code> is <code>false</code> for
   every single one. Filter on it and you get an empty result set, no error, no panic — just
   nothing.</p>
-  <p>Either use <code>entry.path().is_dir()</code>, which follows the link, or simply try to
-  read the <code>name</code> file and skip entries where that fails. The second is what the
-  reference does, and it is more robust anyway.</p></div>
+  <p>Either use <code>entry.path().is_dir()</code>, which follows the link, or try to read the
+  <code>name</code> file and skip entries where that fails. The second is what the reference
+  does.</p></div>
 
   <div class="call gotcha"><span class="tag">Gotcha · <code>PathBuf</code>, <code>Path</code>, <code>OsString</code>, <code>Cow</code></span>
   <p>Where Go has one <code>string</code>, Rust has a small family. The rules of thumb:</p>
@@ -660,8 +656,7 @@ fn temp_inputs(dir: &amp;Path) -&gt; Vec&lt;Sensor&gt; {
   only edge. Among candidate directories for a driver, take the one with the most temperature
   inputs, then within it prefer a specific label.</p>
 
-  <p>This is the one place in the project where an iterator chain is clearly better than a loop,
-  which makes it a good place to actually learn them rather than being told to.
+  <p>This is the one place in the project where an iterator chain is clearly better than a loop.
   <code>.map()</code> transforms each item, <code>.max_by_key()</code> picks a winner, and the
   <code>?</code> at the end unwraps the <code>Option</code> it returns or bails out early.</p>
 
@@ -677,8 +672,8 @@ fn temp_inputs(dir: &amp;Path) -&gt; Vec&lt;Sensor&gt; {
 
   <div class="call why"><span class="tag">It's a heuristic, so say what you picked</span>
   <p>This guess is right on every machine anyone has tested and could be wrong on yours. One
-  <code>eprintln!</code> at startup naming the chosen paths turns a baffling wrong number into a
-  one-second diagnosis.</p></div>
+  <code>eprintln!</code> at startup naming the chosen paths makes a wrong guess diagnosable from
+  the log.</p></div>
 
   <div class="call check"><span class="tag">Checkpoint</span>
   <p>Your finder should land on <code>hwmon4/temp1_input</code> (Tctl) for the CPU and
@@ -730,8 +725,7 @@ fn find_gpu() -&gt; Option&lt;PathBuf&gt; {
 
   <p>Discovery is the same directory-scanning shape as step 3 with a different matcher: walk
   <code>/sys/class/hidraw/*</code>, read each <code>device/uevent</code>, and look for the
-  <code>HID_ID</code> line. <strong>You already know how to do this</strong> — write it before
-  opening the solution.</p>
+  <code>HID_ID</code> line.</p>
 
   <div class="call gotcha"><span class="tag">Gotcha · eight hex digits, not four</span>
   <p><code>HID_ID=0003:00002022:00000522</code>. The vendor and product fields are zero-padded to
@@ -745,12 +739,11 @@ fn find_gpu() -&gt; Option&lt;PathBuf&gt; {
 
   <div class="call gotcha"><span class="tag">Gotcha · the trait must be imported to be callable</span>
   <p>You will write <code>file.write_all(&amp;buf)</code> and get <em>no method named
-  <code>write_all</code> found for struct <code>File</code></em>, which is baffling because
-  <code>File</code> obviously can be written to.</p>
+  <code>write_all</code> found for struct <code>File</code></em>, even though <code>File</code>
+  is writable.</p>
   <p><code>write_all</code> comes from the <code>Write</code> trait, and in Rust a trait's methods
   only exist on a type when the trait is in scope. Add <code>use std::io::Write;</code> at the
-  top. This is the concrete difference from Go's implicit interface satisfaction, and it catches
-  every Go programmer exactly once.</p></div>
+  top. This is the difference from Go's implicit interface satisfaction.</p></div>
 
   <div class="call gotcha"><span class="tag">Gotcha · the file has to be <code>mut</code></span>
   <p><code>write_all</code> takes <code>&amp;mut self</code>, so
@@ -775,9 +768,8 @@ fn find_gpu() -&gt; Option&lt;PathBuf&gt; {
   breaks the protocol here: <code>hidraw</code> maps one <code>write()</code> syscall to one HID
   report, so buffering can split your report or hold it until a flush you forgot.
   <code>File::write_all</code> is already one syscall for a buffer this size.</p>
-  <p>And, one more time, because search results will push you there: not <code>hidapi</code>, not
-  <code>rusb</code>. They require detaching the kernel driver, drag in a C toolchain, and buy you
-  nothing over a file you can already open.</p></div>
+  <p>Not <code>hidapi</code> or <code>rusb</code> either: they require detaching the kernel
+  driver, drag in a C toolchain, and buy you nothing over a file you can already open.</p></div>
 
   <div class="call check"><span class="tag">Checkpoint</span>
   <p>Aim at a scratch file before the real device — no root needed:</p>
@@ -837,14 +829,13 @@ fn send(file: &amp;mut File, packet: &amp;[u8; 12]) -&gt; std::io::Result&lt;()&
   <p class="goal">Read both sensors, build, send, wait a second, repeat.</p>
 
   <p>Mechanically this is <code>loop { … }</code> and
-  <code>thread::sleep(Duration::from_secs(1))</code>. That is the whole thing.</p>
+  <code>thread::sleep(Duration::from_secs(1))</code>.</p>
 
   <div class="call why"><span class="tag">Before you go looking for something fancier</span>
   <p>One thread, one blocking sleep, no channels, no ticker abstraction, no
-  <code>tokio</code>. For a task that happens once a second this is not a compromise — it is the
-  correct and complete design, and anything else is strictly more code doing strictly more work.
-  Rust makes async so visible that beginners assume they are supposed to reach for it. Not
-  here.</p></div>
+  <code>tokio</code>. For a task that runs once a second this is the complete design; anything
+  else is more code doing more work. Rust makes async so visible that beginners assume they are
+  supposed to reach for it. Not here.</p></div>
 
   <div class="call why"><span class="tag">Error policy in a daemon</span>
   <p>Inside the loop, errors are <strong>not</strong> propagated with <code>?</code>. A sensor
@@ -858,8 +849,8 @@ fn send(file: &amp;mut File, packet: &amp;[u8; 12]) -&gt; std::io::Result&lt;()&
 
   <div class="call reach"><span class="tag">Reach for</span>
   <p><code>Option::as_deref()</code> to turn your <code>Option&lt;PathBuf&gt;</code> into an
-  <code>Option&lt;&amp;Path&gt;</code> without giving up ownership. And note that <code>?</code>
-  works on <code>Option</code> too, not just <code>Result</code> — which makes
+  <code>Option&lt;&amp;Path&gt;</code> without giving up ownership. <code>?</code> also works on
+  <code>Option</code>, not just <code>Result</code> — which makes
   &ldquo;no path, so no reading&rdquo; a single character.</p></div>
 
   <div class="call check"><span class="tag">Checkpoint</span>
@@ -933,10 +924,9 @@ fn main() -&gt; Result&lt;(), Box&lt;dyn Error&gt;&gt; {
   <div class="call why"><span class="tag">You never call close()</span>
   <p>Rust closes the file when the <code>File</code> value is dropped — when it goes out of
   scope, or when you overwrite it with <code>None</code>. There is no
-  <code>defer f.Close()</code> because there is nothing to defer. This is RAII, and it is one of
-  the genuinely nicer things about the language.</p>
-  <p>Learn it now, and also learn its one limit, which you will meet in step 8: <strong>drop
-  does not run when a process is killed by a signal.</strong></p></div>
+  <code>defer f.Close()</code> because there is nothing to defer. This is RAII.</p>
+  <p>Its one limit matters in step 8: <strong>drop does not run when a process is killed by a
+  signal.</strong></p></div>
 
   <div class="call gotcha"><span class="tag">Gotcha · two <code>&amp;mut self</code> borrows at once</span>
   <p>The natural way to write <code>send</code> does not compile:</p>
@@ -949,7 +939,7 @@ if let Err(e) = file.write_all(&amp;buf) {
   <p>The first borrow is still alive when you try to touch <code>self</code> again. The fix is to
   end the borrow before you need <code>self</code> back: do the write, store the
   <em>result</em> in a local, and only then modify <code>self</code>. The reference does exactly
-  that, and it is worth writing the broken version once so you recognise E0499 later.</p></div>
+  that.</p></div>
 
   <div class="call gotcha"><span class="tag">Gotcha · re-run discovery, don't reuse the path</span>
   <p>After a replug the device may come back as a different <code>/dev/hidrawN</code>. Reopening
@@ -1027,12 +1017,9 @@ impl Display {
   is no equivalent of Go's <code>os/signal</code>. Ctrl-C takes the default SIGINT disposition
   and your process dies instantly.</p>
   <p>And the RAII you learned in step 7 does not save you: <strong><code>Drop</code> does not run
-  when a process is killed by a signal.</strong> Cleanup code in a destructor is simply skipped.
-  This is worth internalising — it is a real limit on a pattern that otherwise feels
-  bulletproof.</p></div>
+  when a process is killed by a signal.</strong> Cleanup code in a destructor is skipped.</p></div>
 
-  <p>You have three genuine options, and it is worth understanding that adding a crate is not
-  automatically the answer:</p>
+  <p>Three options; a crate is not automatically the answer:</p>
 
   <div class="tablewrap"><table>
     <thead><tr><th>Option</th><th>Cost</th><th>Verdict</th></tr></thead>
@@ -1044,8 +1031,7 @@ impl Display {
   </table></div>
 
   <div class="call reach"><span class="tag">Reach for</span>
-  <p><code>cargo add signal-hook</code> — your first external dependency, at step 8, which is
-  itself worth noticing. Then
+  <p><code>cargo add signal-hook</code> — your first external dependency. Then
   <code>signal_hook::flag::register(SIGTERM, Arc::clone(&amp;stop))</code>, where
   <code>stop</code> is an <code>Arc&lt;AtomicBool&gt;</code>.</p>
   <p>Treat that type as documented boilerplate rather than a concurrency lecture. The reasoning
@@ -1063,9 +1049,8 @@ impl Display {
   <p>Foreground, Ctrl-C: the panel shows <code>--.-</code> within about a second and the process
   exits 0 — check with <code>echo $?</code>. Then <code>kill -TERM</code> the PID and confirm
   identical behaviour.</p>
-  <p>Now the instructive one: <code>kill -KILL</code> it. The panel keeps its stale reading,
-  because SIGKILL cannot be caught by anything and no destructor runs. That is not a bug in your
-  program — it is the step-7 RAII lesson meeting its limit, and it is worth seeing once.</p>
+  <p>Then <code>kill -KILL</code> it. The panel keeps its stale reading — SIGKILL cannot be
+  caught by anything and no destructor runs. That is not a bug in your program.</p>
   <label class="ck"><input type="checkbox" data-ck="rs8"> mark step done</label></div>
 
   <details><summary>Reference implementation — step 8</summary><div class="details-body">
@@ -1150,9 +1135,8 @@ sudo systemctl enable --now antec-display</code></pre></div>
 
   <div class="call why"><span class="tag">You do not need a logging crate</span>
   <p>Under systemd, anything on stdout or stderr is captured by journald with timestamps and
-  metadata. <code>eprintln!</code> is genuinely sufficient — no <code>log</code>, no
-  <code>env_logger</code>, no <code>tracing</code>. Demonstrate it to yourself with
-  <code>journalctl -u</code> and the temptation goes away.</p>
+  metadata. <code>eprintln!</code> is sufficient — no <code>log</code>, no
+  <code>env_logger</code>, no <code>tracing</code>.</p>
   <p>The same restraint applies to <code>clap</code> for a couple of flags and
   <code>serde</code> for config you do not have. Your dependency count for this whole project is
   one.</p></div>
@@ -1176,8 +1160,7 @@ sudo systemctl enable --now antec-display</code></pre></div>
   <p>Restart twice. <code>systemctl stop</code> and confirm the panel blanks rather than
   freezing, which is step 8 working through systemd's SIGTERM.</p>
   <p>Then reboot. If it finds the right hidraw node and the right hwmon directories on a machine
-  where the numbering has shifted, steps 3 through 5 earned their keep — and you have written a
-  real Rust program that runs on your machine whether or not you are looking at it.</p>
+  where the numbering has shifted, the discovery code from steps 3 through 5 works.</p>
   <label class="ck"><input type="checkbox" data-ck="rs9"> mark step done</label></div>
 
   <div class="mobile-next">

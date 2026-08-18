@@ -212,21 +212,19 @@ details > summary:focus-visible{outline:2px solid var(--accent);outline-offset:-
   with <code>printf</code> and <code>dd</code> takes thirty seconds and permanently separates
   &ldquo;my Go is wrong&rdquo; from &ldquo;my understanding of the device is wrong&rdquo;.</p>
 
-  <p>Everything here is standard library. No modules to add, no cgo, no build tags. That is
-  worth stating up front because searching for &ldquo;USB HID Go&rdquo; will push you toward
-  <code>gousb</code> or <code>karalabe/hid</code>, both of which drag in a C toolchain and
-  neither of which you need.</p>
+  <p>Everything here is standard library. No modules to add, no cgo, no build tags. Searching
+  for &ldquo;USB HID Go&rdquo; will push you toward <code>gousb</code> or
+  <code>karalabe/hid</code>; both drag in a C toolchain and neither is needed.</p>
 
   <div class="codewrap"><span class="label">shell</span>
 <pre><code>mkdir -p ~/src/antec-display &amp;&amp; cd ~/src/antec-display
 go mod init antec-display</code></pre></div>
 
   <h3>How each step is laid out</h3>
-  <p>Every step states a goal, points at the specific standard-library calls worth reaching for,
+  <p>Every step states a goal, points at the specific standard-library calls to reach for,
   warns you about what will go wrong, and gives you a way to prove it worked. A reference
-  implementation sits behind a collapsed block at the end. It is there for when a step will not
-  come together — opening it immediately works, but you will learn less than if you fight it
-  for ten minutes first.</p>
+  implementation sits behind a collapsed block at the end of each step — try the step before
+  opening it.</p>
 </section>
 
 <section id="s1">
@@ -250,10 +248,9 @@ go mod init antec-display</code></pre></div>
   <div class="call gotcha"><span class="tag">Gotcha · you cannot slice a returned array</span>
   <p><code>copy(p[5:8], digits(cpu)[:])</code> does not compile:
   <em>invalid operation: cannot slice unaddressable value</em>. A function's return value has no
-  address, and slicing an array requires one. Assign it to a variable first, then slice that.
-  This catches nearly everyone once.</p></div>
+  address, and slicing an array requires one. Assign it to a variable first, then slice that.</p></div>
 
-  <div class="call why"><span class="tag">The checksum, and why Go makes this easy</span>
+  <div class="call why"><span class="tag">The checksum</span>
   <p><code>0x55 + 0xAA + 0x01</code> already exceeds a byte. Accumulate in a <code>byte</code>
   and Go wraps silently — which, because the spec wants exactly <code>sum &amp; 0xFF</code>,
   happens to give the right answer. It works by luck rather than by design, so accumulate in a
@@ -405,10 +402,9 @@ func TestDigitsClamp(t *testing.T) {
 
   <div class="call gotcha"><span class="tag">Gotcha · integer division eats the decimal</span>
   <p><code>47125 / 1000</code> is <code>47</code>, silently. You need
-  <code>float64(milli) / 1000</code>. Worth noticing that you could skip floats entirely and
-  work in tenths — <code>(milli + 50) / 100</code> gives you 471 directly, which is exactly what
-  the digit splitter wants and has no rounding subtleties at all. Either is fine; pick on
-  purpose.</p></div>
+  <code>float64(milli) / 1000</code>. You could also skip floats entirely and work in tenths —
+  <code>(milli + 50) / 100</code> gives you 471 directly, which is exactly what the digit
+  splitter wants and has no rounding subtleties at all. Either is fine; pick on purpose.</p></div>
 
   <div class="call check"><span class="tag">Checkpoint</span>
   <p><code>cat /sys/class/hwmon/hwmon4/temp1_input</code> prints something like
@@ -462,7 +458,7 @@ func readTemp(path string) (float64, error) {
   <code>k10temp</code> and a preferred label like <code>Tctl</code>, return the matching
   <code>tempN_input</code> path.</p>
 
-  <p>Before you write it, earn the step. Reboot, or run
+  <p>First, see the problem: reboot, or run
   <code>sudo udevadm trigger</code>, then check whether <code>hwmon4</code> is still
   <code>k10temp</code>. Numbering is assigned in driver-probe order and moves. If your program
   quietly starts showing your network card's temperature, that is why.</p>
@@ -566,7 +562,7 @@ func hwmonByDriver(driver string) []string {
 
   <p>A Ryzen desktop chip with integrated graphics gives you two <code>amdgpu</code> hwmon
   directories. One is your RX 9070; the other is the iGPU sitting at idle forever. Pick wrong
-  and the panel is confidently, permanently useless.</p>
+  and the panel shows the iGPU's idle temperature from now on.</p>
 
   <div class="tablewrap"><table>
     <thead><tr><th>Path</th><th>Inputs</th><th>Labels</th><th>Which</th></tr></thead>
@@ -583,8 +579,8 @@ func hwmonByDriver(driver string) []string {
 
   <div class="call why"><span class="tag">It's a heuristic, so say what you picked</span>
   <p>This is a guess that happens to be right on every machine anyone has tested. It could be
-  wrong on yours. One <code>log.Printf</code> at startup naming the chosen paths turns a
-  baffling wrong number into a one-second diagnosis, and costs you a line.</p></div>
+  wrong on yours. One <code>log.Printf</code> at startup naming the chosen paths makes a wrong
+  guess diagnosable from the journal.</p></div>
 
   <div class="call check"><span class="tag">Checkpoint</span>
   <p>Your finder should land on <code>hwmon4/temp1_input</code> (Tctl) for the CPU and
@@ -643,8 +639,7 @@ func findGPU() (string, bool) {
 
   <p>Two halves. Discovery is the same directory-scanning shape as step 3 with a different
   matcher: walk <code>/sys/class/hidraw/*</code>, read each <code>device/uevent</code>, and look
-  for the <code>HID_ID</code> line. You already know how to do this — try it before opening the
-  solution.</p>
+  for the <code>HID_ID</code> line.</p>
 
   <div class="call gotcha"><span class="tag">Gotcha · eight hex digits, not four</span>
   <p><code>HID_ID=0003:00002022:00000522</code>. The vendor and product fields are zero-padded to
@@ -664,11 +659,10 @@ func findGPU() (string, bool) {
   you never read from this device, and the IN endpoint would block if you tried.</p></div>
 
   <div class="call wrong"><span class="tag">Reaching for the wrong tool</span>
-  <p><code>bufio.NewWriter</code> around the device. It is such a reflex that people add it
-  without thinking, and here it silently breaks the protocol: <code>hidraw</code> maps one
-  <code>write()</code> syscall to one HID report, so buffering can split your report or hold it
-  until a flush you forgot. <code>*os.File.Write</code> is already exactly one syscall. Use it
-  directly.</p>
+  <p><code>bufio.NewWriter</code> around the device. Here it silently breaks the protocol:
+  <code>hidraw</code> maps one <code>write()</code> syscall to one HID report, so buffering can
+  split your report or hold it until a flush you forgot. <code>*os.File.Write</code> is already
+  exactly one syscall. Use it directly.</p>
   <p>Same trap, different shape: writing the header and the body in two calls.</p></div>
 
   <div class="call check"><span class="tag">Checkpoint</span>
@@ -751,7 +745,7 @@ func send(f *os.File, p [12]byte) error {
   <p class="goal">Read both sensors, build, send, wait a second, repeat. Now it is a program
   rather than a script.</p>
 
-  <p>Mechanically trivial. The interesting decisions are about failure: a sensor read that fails
+  <p>The mechanics are trivial; the decisions are about failure: a sensor read that fails
   on one tick must not kill the process, and a missing sensor at startup must not stop the other
   half of the panel from working.</p>
 
@@ -858,7 +852,7 @@ func orNone(path string, ok bool) string {
   process exits. Close explicitly when you drop the handle.</p></div>
 
   <div class="call why"><span class="tag">Back off</span>
-  <p>If the device is genuinely gone, retrying every second forever is fine and cheap. Retrying
+  <p>If the device stays gone, retrying every second forever is fine and cheap. Retrying
   in a tight loop with no delay is not — you will fill the journal in minutes. A couple of
   seconds between attempts is plenty, and worth logging the first failure but not the
   hundredth.</p></div>
@@ -949,7 +943,7 @@ func (d *display) send(p [12]byte) error {
   <code>defer</code> and something later calls <code>log.Fatal</code>, the panel keeps its stale
   reading. Blank explicitly on the shutdown path.</p></div>
 
-  <div class="call why"><span class="tag">Worth knowing before you read the Rust page</span>
+  <div class="call why"><span class="tag">Before you read the Rust page</span>
   <p>This step is about fifteen lines of standard library. Rust's standard library has no signal
   handling at all — no <code>os/signal</code> equivalent, at any level. Doing this in Rust means
   adding your first external crate, or pushing the problem out to systemd. It is the one place
@@ -959,9 +953,8 @@ func (d *display) send(p [12]byte) error {
   <p>Run it in the foreground and press Ctrl-C: the panel should show <code>--.-</code> within
   about a second and the process should exit 0 — check with <code>echo $?</code>. Then
   <code>kill -TERM</code> the PID and confirm identical behaviour.</p>
-  <p>Now the instructive one: <code>kill -KILL</code> it. The panel keeps its stale reading,
-  because SIGKILL cannot be caught by anything. That is not a bug in your program, and it is
-  worth seeing once so you know what it looks like.</p>
+  <p>Then <code>kill -KILL</code> it. The panel keeps its stale reading, because SIGKILL cannot
+  be caught by anything. That is not a bug in your program.</p>
   <label class="ck"><input type="checkbox" data-ck="go8"> mark step done</label></div>
 
   <details><summary>Reference implementation — step 8</summary><div class="details-body">
@@ -1032,9 +1025,9 @@ func main() {
 <pre><code>CGO_ENABLED=0 go build -ldflags="-s -w" -o antec-display .
 ldd antec-display     # "not a dynamic executable"</code></pre></div>
 
-  <p><code>CGO_ENABLED=0</code> is the point of the exercise: one file, no interpreter, no shared
-  libraries, nothing to install alongside it. Compare that against the Python version in this
-  repo, which needs a working Python 3 on the box forever.</p>
+  <p><code>CGO_ENABLED=0</code> gives you one file: no interpreter, no shared libraries, nothing
+  to install alongside it. Compare that against the Python version in this repo, which needs a
+  working Python 3 on the box forever.</p>
 
   <p>The repo already has a <a href="99-antec-display.rules">udev rule</a> and a
   <a href="antec-display.service">systemd unit</a> written for the Python daemon. Reuse both —
@@ -1055,7 +1048,7 @@ sudo systemctl enable --now antec-display</code></pre></div>
 
   <div class="call why"><span class="tag">You do not need a logging library</span>
   <p>Under systemd, anything your process writes to stdout or stderr is captured by journald
-  with correct timestamps and metadata. <code>log.Printf</code> is genuinely sufficient — no
+  with correct timestamps and metadata. <code>log.Printf</code> is sufficient — no
   <code>zap</code>, no <code>logrus</code>, no <code>slog</code> handler configuration.
   <code>log.SetFlags(0)</code> is worth setting so you do not print a timestamp next to
   journald's own.</p></div>
@@ -1073,7 +1066,7 @@ sudo systemctl enable --now antec-display</code></pre></div>
   <p>Restart it twice. Then <code>systemctl stop</code> and confirm the panel blanks rather than
   freezing — that is step 8 working through systemd's SIGTERM.</p>
   <p>Then reboot. If it finds the right hidraw node and the right hwmon directories on a machine
-  where the numbering has shifted, steps 3 and 5 earned their keep.</p>
+  where the numbering has shifted, the discovery code from steps 3 and 5 works.</p>
   <label class="ck"><input type="checkbox" data-ck="go9"> mark step done</label></div>
 
   <div class="mobile-next">
