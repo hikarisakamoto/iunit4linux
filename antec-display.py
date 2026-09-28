@@ -164,7 +164,7 @@ def main():
     )
     gpu_sensor = GPU_SENSOR_ENV or find_sensor(
         "amdgpu", ("edge",), require_discrete=True
-    ) or find_sensor("nvidia")
+    )
 
     if cpu_sensor is None and gpu_sensor is None:
         sys.exit("no CPU or GPU temperature sensor found under /sys/class/hwmon")

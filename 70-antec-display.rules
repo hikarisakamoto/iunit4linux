@@ -1,4 +1,5 @@
 # Antec case temperature display (DINK HID device).
 # uaccess hands the node to the user logged in at the local seat, so the
-# script can be run without root for testing.
+# script can be run without root for testing. The file must sort before
+# 73-seat-late.rules, which is where udev acts on the uaccess tag.
 KERNEL=="hidraw*", ATTRS{idVendor}=="2022", ATTRS{idProduct}=="0522", TAG+="uaccess", MODE="0660", GROUP="input"
