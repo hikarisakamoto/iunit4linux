@@ -34,13 +34,16 @@ scratch. Open the HTML files in a browser:
 | Page | What's in it |
 |------|--------------|
 | [`foundations.html`](foundations.html) | The hardware, the HID report descriptor decoded, the protocol, `hwmon`, permissions, and a debugging toolkit. Language-agnostic — read it first. |
-| [`go.html`](go.html) | Nine steps to a systemd service in Go. Assumes you know some Go. |
+| [`go.html`](go.html) | Nine incremental builds in Go: trace values, test the encoding, inspect sensors, then handle device state and shutdown. Assumes familiar Go syntax. |
 | [`rust.html`](rust.html) | The same nine steps in Rust, for someone who has never written it but knows some Go. |
 
-Each step gives the goal, the standard-library calls to use, the gotchas, and a
-reference implementation in a collapsed block. The reference code compiles and
-its tests pass on Go 1.27.0 and rustc 1.98.1; the Rust code is clean under
-`cargo clippy` in debug and release.
+The Go steps start with small implementation tasks and concrete checks, with
+collapsed hints before the reference code. Guidance decreases as the pieces come
+together; later exercises cover reconnect state, cancellation, and changes you can
+make after the service works. The reference checkpoints are tested with Go 1.27.0.
+
+The Rust steps include standard-library calls, gotchas, and collapsed reference
+implementations, verified with rustc 1.98.1 and `cargo clippy` in debug and release.
 
 ## Protocol
 

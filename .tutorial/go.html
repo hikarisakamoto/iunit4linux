@@ -174,13 +174,13 @@ details > summary:focus-visible{outline:2px solid var(--accent);outline-offset:-
   <a class="backlink" href="foundations.html">← Foundations: the hardware and the protocol</a>
   <p class="kicker">Antec panel · Go</p>
   <h1>Build it in Go</h1>
-  <p class="standfirst">Nine steps from an empty module to a systemd service showing your CPU and
-  GPU temperatures on the case. This page assumes you can already read and write Go.</p>
+  <p class="standfirst">Build a temperature-display service one working piece at a time.
+  Go syntax is assumed; data flow, tests, error handling, and device state are worked through
+  as you need them.</p>
   <div class="masthead-meta">
     <span class="chip">stdlib only</span>
     <span class="chip">no cgo</span>
-    <span class="chip">~200 lines</span>
-    <span class="chip">go 1.27.0 verified</span>
+    <span class="chip">9 working checkpoints</span>
   </div>
 </header>
 
@@ -209,15 +209,33 @@ details > summary:focus-visible{outline:2px solid var(--accent);outline-offset:-
   <p>Read <a href="foundations.html">the foundations page</a> first, and do its
   <a href="foundations.html#warmup">shell warm-up</a>.</p>
 
-  <p>Everything here is standard library. <code>gousb</code> and <code>karalabe/hid</code> need a
-  C toolchain; neither is needed (foundations, section 02).</p>
+  <p>The data path is <code>sensor file → Celsius → Reading → digit bytes → packet → HID
+  report</code>. Discovery supplies paths; the loop repeats the work. Start with the packet
+  so you can verify the encoding before involving files or hardware.</p>
 
   <div class="codewrap"><span class="label">shell</span>
 <pre><code>mkdir -p ~/src/antec-display &amp;&amp; cd ~/src/antec-display
 go mod init antec-display</code></pre></div>
 
-  <p>A reference implementation sits behind a collapsed block at the end of each step; try the
-  step before opening it.</p>
+  <p>If you are already working in this repo, use its existing <code>go.mod</code> instead.
+  Steps 1–4 need no panel. Step 5 adds device access, after a scratch-file check.</p>
+
+  <h3>How to work through a step</h3>
+  <ol class="body">
+    <li>Predict the result of the example before running it.</li>
+    <li>Build one numbered task, then run its check. Use the hint if you get stuck.</li>
+    <li>Compare with the reference after your version works. Explain any difference in behavior.</li>
+    <li>Mark the step done when you can trace its input to its output without the reference.</li>
+  </ol>
+  <p>Keep one <code>main.go</code>. A block labelled <em>replace</em> replaces that file;
+  <em>add</em> appends declarations, with imports merged into the file's existing import block.
+  All files use <code>package main</code>, so run the package with <code>go run .</code>,
+  not an individual file.</p>
+  <div class="codewrap"><span class="label">after each working change</span>
+<pre><code>gofmt -w *.go
+go test ./...</code></pre></div>
+  <p>Tests run without a <code>main()</code> function. <code>go run .</code> and
+  <code>go build .</code> need one; you add it in step 2.</p>
 </section>
 
 <section id="s1">
@@ -225,32 +243,74 @@ go mod init antec-display</code></pre></div>
   <p class="goal">Turn two temperatures into the twelve-byte packet. No I/O, so it is fully
   testable.</p>
 
-  <p>Two functions: one that splits one temperature into its three digit bytes, and one that
-  assembles the full packet and checksums it. Both halves of the panel can be
-  absent, so your digit function needs a way to express &ldquo;no reading&rdquo; and return
-  <code>0xEE 0xEE 0xEE</code>. Go has no option type; a small struct carrying a value and a
-  validity flag reads better here than a <code>*float64</code>, and it keeps
-  <code>buildPacket</code> down to two parameters.</p>
+  <h3>1. Encode one available reading</h3>
+  <p>Start <code>packet.go</code> with a <code>Reading</code> type containing
+  <code>Celsius float64</code> and <code>Valid bool</code>, then implement
+  <code>func digits(r Reading) [3]byte</code>. For now, handle available values in the range
+  0–99.9. Use your own names if you prefer; keep them consistent in the tests and callers.</p>
+  <p>Work in whole tenths: <code>44.3 → 443</code>. Given <code>v := 443</code>, calculate
+  <code>v / 100</code>, <code>v / 10 % 10</code>, and <code>v % 10</code>. Repeat with
+  <code>v := 70</code>. Which expression removes the tens digit from the ones place?</p>
+  <p>Round to the nearest tenth, with halfway values rounded up after clamping. This is a display
+  choice, not a checksum or HID requirement. For <code>44.31</code>, rounding gives
+  <code>44.3</code>; <code>math.Ceil(c * 10)</code> gives <code>44.4</code>. Add a test for that
+  difference if your current implementation uses <code>Ceil</code>.</p>
+  <div class="codewrap"><span class="label">packet_test.go — first test</span>
+<pre data-lang="go"><code>package main
+
+import "testing"
+
+func TestDigits(t *testing.T) {
+	got := digits(Reading{Celsius: 44.3, Valid: true})
+	want := [3]byte{4, 4, 3}
+	if got != want {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}</code></pre></div>
+  <p>Run <code>go test -run '^TestDigits$' -v</code>. Before extending the test, change its
+  expected last digit to 2 and run it again. Check that the failure names the differing arrays,
+  then restore 3.</p>
+
+  <h3>2. Define the boundary behavior</h3>
+  <p><code>Reading{}</code> means unavailable; <code>Reading{Celsius: 0, Valid: true}</code>
+  means a measured zero. Check <code>Valid</code> first and return
+  <code>[3]byte{0xEE, 0xEE, 0xEE}</code> when it is false. Then clamp available values to
+  0–99.9 before rounding. Assume finite values: later reads parse integer millidegrees.</p>
+  <p>Extend the test with zero, negative, above-range, and absent readings. Arrays of the same
+  type can be compared with <code>==</code>; a <code>[]byte</code> slice cannot. A table test
+  is a slice of cases with an input and an expected result, followed by the same assertion
+  for each case.</p>
+
+  <h3>3. Assemble the packet</h3>
+  <p>Implement <code>func buildPacket(cpu, gpu Reading) [12]byte</code>. Fill the fixed bytes,
+  place the CPU and GPU triples, then compute byte 11 from bytes 0–10. Keep the report-ID
+  prefix out of this function; it belongs to the writer in step 5.</p>
 
   <div class="call reach"><span class="tag">Reach for</span>
-  <p><code>[12]byte</code> and <code>[3]byte</code> — fixed arrays, not slices; the sizes are
-  fixed, so say so in the type. <code>copy()</code> to move digit triples into place.
-  <code>%X</code> and <code>%02X</code> to print bytes.</p></div>
+  <p><code>p[5:8]</code> is a slice covering indexes 5, 6, and 7: the upper bound is excluded.
+  <code>c[:]</code> views all three elements of the array <code>c</code>.
+  <code>copy(p[5:8], c[:])</code> copies those values into the packet. Changing the slice's
+  elements changes the underlying array.</p></div>
 
   <div class="call gotcha"><span class="tag">Gotcha · you cannot slice a returned array</span>
   <p><code>copy(p[5:8], digits(cpu)[:])</code> does not compile: <em>cannot slice unaddressable
-  value digits(cpu) (value of type [3]byte)</em>. A function's return value has no address, and
-  slicing an array requires one. Assign it to a variable first, then slice that.</p></div>
+  value digits(cpu) (value of type [3]byte)</em>. That returned array is not addressable,
+  and slicing an array requires an addressable value. Assign it to a variable first.</p></div>
 
   <div class="call why"><span class="tag">The checksum</span>
-  <p>Accumulating in a <code>byte</code> wraps silently, and because the spec wants
-  <code>sum &amp; 0xFF</code> the result is right by accident. Accumulate in a
-  <code>uint32</code> and convert once at the end anyway.</p></div>
+  <p>A running <code>byte</code> sum wraps modulo 256 in Go, which does implement this
+  checksum. A <code>uint32</code> sum followed by <code>byte(sum)</code> makes the two stages
+  explicit: add, then keep the low eight bits. For the first vector, the full sum is
+  <code>280 = 0x118</code>, so byte 11 is <code>0x18</code>.</p></div>
 
-  <div class="call wrong"><span class="tag">Reaching for the wrong tool</span>
-  <p>Do not build this with <code>strconv</code>, <code>fmt.Sprintf</code> or a
-  <code>string</code>: the digits are <em>values</em>, not characters (foundations,
-  section 04).</p></div>
+  <details><summary>Hint — digit arithmetic and packet offsets</summary><div class="details-body">
+  <p>After clamping, <code>int(c * 10 + 0.5)</code> rounds a non-negative value into whole
+  tenths. Integer division discards the remainder; <code>% 10</code> keeps the last digit.
+  For 70, the result is <code>[0, 7, 0]</code>.</p>
+  <p>Use the protocol's byte-offset table to place the triples. A digit 4 is
+  <code>0x04</code>, not the character <code>'4'</code> (<code>0x34</code>).
+  Check those offsets before debugging the checksum.</p>
+  </div></details>
 
   <div class="call check"><span class="tag">Checkpoint</span>
   <p>Table-test the two vectors from the protocol page:</p>
@@ -259,17 +319,16 @@ go mod init antec-display</code></pre></div>
 blank / blank ->  55 AA 01 01 06 EE EE EE EE EE EE 9B</code></pre></div>
   <p>Add edge cases: <code>0.0</code> gives <code>00 00 00</code>, <code>99.9</code> gives
   <code>09 09 09</code>, <code>150.0</code> clamps to <code>09 09 09</code>, and
-  <code>-5.0</code> clamps to <code>00 00 00</code>. Finish with a self-consistency assertion
-  that byte 11 equals the low byte of the sum of bytes 0–10.</p>
+  <code>-5.0</code> clamps to <code>00 00 00</code>. Test one absent half at a time too, to
+  catch swapped CPU/GPU offsets. A checksum-only assertion would miss swapped fields;
+  compare complete packets against independently specified bytes.</p>
   <label class="ck"><input type="checkbox" data-ck="go1"> mark step done</label></div>
 
   <details><summary>Reference implementation — step 1</summary><div class="details-body">
   <div class="codewrap"><span class="label">packet.go</span>
 <pre data-lang="go"><code>package main
 
-// Reading is a temperature that may or may not be available. Go has no
-// option type; an explicit Valid flag beats a *float64 here because the
-// zero value (absent) is the safe default.
+// The zero value represents an unavailable reading.
 type Reading struct {
 	Celsius float64
 	Valid   bool
@@ -310,7 +369,7 @@ func buildPacket(cpu, gpu Reading) [12]byte {
 	p[11] = byte(sum)
 	return p
 }</code></pre></div>
-  <div class="codewrap"><span class="label">packet_test.go</span>
+  <div class="codewrap"><span class="label">packet_test.go — replace the first test with these tests</span>
 <pre data-lang="go"><code>package main
 
 import "testing"
@@ -326,6 +385,12 @@ func TestBuildPacket(t *testing.T) {
 		{"blank", Reading{}, Reading{},
 			[12]byte{0x55, 0xAA, 0x01, 0x01, 0x06,
 				0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0x9B}},
+		{"cpu only", Reading{44.3, true}, Reading{},
+			[12]byte{0x55, 0xAA, 0x01, 0x01, 0x06,
+				4, 4, 3, 0xEE, 0xEE, 0xEE, 0xDC}},
+		{"gpu only", Reading{}, Reading{42.0, true},
+			[12]byte{0x55, 0xAA, 0x01, 0x01, 0x06,
+				0xEE, 0xEE, 0xEE, 4, 2, 0, 0xD7}},
 	}
 	for _, tc := range cases {
 		got := buildPacket(tc.cpu, tc.gpu)
@@ -342,18 +407,25 @@ func TestBuildPacket(t *testing.T) {
 	}
 }
 
-func TestDigitsClamp(t *testing.T) {
+func TestDigits(t *testing.T) {
 	cases := []struct {
-		in   float64
+		in   Reading
 		want [3]byte
 	}{
-		{0.0, [3]byte{0, 0, 0}},
-		{99.9, [3]byte{9, 9, 9}},
-		{150.0, [3]byte{9, 9, 9}},
-		{-5.0, [3]byte{0, 0, 0}},
+		{Reading{44.3, true}, [3]byte{4, 4, 3}},
+		{Reading{7.0, true}, [3]byte{0, 7, 0}},
+		{Reading{44.31, true}, [3]byte{4, 4, 3}},
+		{Reading{44.36, true}, [3]byte{4, 4, 4}},
+		{Reading{9.96, true}, [3]byte{1, 0, 0}},
+		{Reading{0.0, true}, [3]byte{0, 0, 0}},
+		{Reading{99.9, true}, [3]byte{9, 9, 9}},
+		{Reading{150.0, true}, [3]byte{9, 9, 9}},
+		{Reading{-5.0, true}, [3]byte{0, 0, 0}},
+		{Reading{44.3, false}, [3]byte{0xEE, 0xEE, 0xEE}},
+		{Reading{}, [3]byte{0xEE, 0xEE, 0xEE}},
 	}
 	for _, tc := range cases {
-		if got := digits(Reading{tc.in, true}); got != tc.want {
+		if got := digits(tc.in); got != tc.want {
 			t.Errorf("digits(%v) = %v, want %v", tc.in, got, tc.want)
 		}
 	}
@@ -363,11 +435,35 @@ func TestDigitsClamp(t *testing.T) {
 
 <section id="s2">
   <h2><span class="sec-num">2</span>Read one temperature</h2>
-  <p class="goal">Get <code>47.1</code> out of <code>/sys/class/hwmon/hwmon6/temp1_input</code>.
-  Hardcode the path — you are going to break it deliberately in step 3.</p>
+  <p class="goal">Read one sensor file and return Celsius. Use a known path first; discovery
+  comes next.</p>
 
-  <p>Read the file, trim it, parse it, divide by a thousand. This step decides how errors travel
-  through the program.</p>
+  <h3>1. Trace the conversions</h3>
+  <p>The file contains <code>"47125\n"</code>, not a floating-point number. Write down the
+  value and Go type after each operation:</p>
+  <div class="codewrap"><span class="label">data trace</span>
+<pre><code>ReadFile       []byte   [52 55 49 50 53 10]
+string + trim  string   "47125"
+Atoi           int      47125
+divide         float64  47.125
+digits         [3]byte  [4 7 1]</code></pre></div>
+  <p>Keep reading and display rounding separate. <code>readTemp</code> should return 47.125,
+  not 47.1; the packet builder decides what fits on the panel.</p>
+
+  <h3>2. Implement the reader</h3>
+  <p>In <code>sensors.go</code>, write <code>readSysfs(path string) (string, error)</code>
+  to read and trim, then <code>readTemp(path string) (float64, error)</code> to parse and
+  convert units. Check each error before using the returned value. On failure, return zero
+  and the error; zero alone cannot distinguish failure from a measured 0 °C.</p>
+  <p>Wrap parsing errors with the path and <code>%w</code>. That adds context while preserving
+  the original error for checks such as <code>errors.Is</code>. Do not log in the reader;
+  the caller decides whether to exit or continue.</p>
+
+  <h3>3. Run one read</h3>
+  <p>Add <code>main.go</code> that accepts one path, calls <code>readTemp</code>, and prints
+  both the Celsius value and its digit triple. On error, print the error and exit nonzero.
+  Use <code>go run . /path/to/temp1_input</code>; choose a current path from the foundations
+  warm-up.</p>
 
   <div class="call reach"><span class="tag">Reach for</span>
   <p><code>os.ReadFile</code> — not <code>os.Open</code> and a <code>Scanner</code>; these files
@@ -385,18 +481,30 @@ func TestDigitsClamp(t *testing.T) {
   <code>\n</code> is there in the quoted value, but easy to miss.</p></div>
 
   <div class="call gotcha"><span class="tag">Gotcha · integer division eats the decimal</span>
-  <p><code>47125 / 1000</code> is <code>47</code>, silently. You need
-  <code>float64(milli) / 1000</code>. You could also skip floats and work in tenths:
-  <code>(milli + 50) / 100</code> gives 471 directly, which is what the digit splitter
-  wants.</p></div>
+  <p>If <code>milli</code> is an <code>int</code>, <code>milli / 1000</code> is integer
+  division. Compare <code>float64(milli / 1000)</code> with
+  <code>float64(milli) / 1000</code>: converting after division cannot restore the fraction.</p></div>
+
+  <details><summary>Hint — keep the error path separate</summary><div class="details-body">
+  <p>Use <code>b, err := os.ReadFile(path)</code>, handle <code>err != nil</code>, and only
+  then convert <code>b</code> to a string. Repeat that pattern around <code>strconv.Atoi</code>.
+  A successful return ends with <code>nil</code> as its error value.</p>
+  </div></details>
 
   <div class="call check"><span class="tag">Checkpoint</span>
-  <p><code>cat /sys/class/hwmon/hwmon6/temp1_input</code> prints something like
-  <code>47125</code>; your program prints <code>47.1</code>. Cross-check against
-  <code>sensors</code> and its <code>Tctl</code> line.</p>
+  <p>First check a stable input with an ordinary file, then read the real sensor:</p>
+  <div class="codewrap"><span class="label">shell — no hardware needed for the first read</span>
+<pre><code>printf '47125\n' &gt; /tmp/antec-temp-input
+go run . /tmp/antec-temp-input
+# 47.125 °C; panel digits [4 7 1]
+go run . /sys/class/hwmon/hwmon6/temp1_input</code></pre></div>
+  <p>Replace <code>hwmon6</code> with your current CPU sensor directory. Compare the live
+  result with <code>sensors</code>; readings taken at different times may differ.</p>
   <p>Then break it on purpose twice: point it at a path that does not exist, and at
   <code>.../name</code>, which exists but will not parse. Both should produce one clean line
-  naming the file, not a panic or a bare <em>invalid syntax</em>.</p>
+  naming the file, not a panic or a bare <em>invalid syntax</em>. Temporarily remove
+  <code>TrimSpace</code> and retry the stable input. Explain why a file that looked numeric
+  stopped parsing, then restore the trim.</p>
   <label class="ck"><input type="checkbox" data-ck="go2"> mark step done</label></div>
 
   <details><summary>Reference implementation — step 2</summary><div class="details-body">
@@ -432,23 +540,56 @@ func readTemp(path string) (float64, error) {
 	}
 	return float64(milli) / 1000, nil
 }</code></pre></div>
+  <div class="codewrap"><span class="label">main.go — add</span>
+<pre data-lang="go"><code>package main
+
+import (
+	"fmt"
+	"log"
+	"os"
+)
+
+func main() {
+	log.SetFlags(0)
+	if len(os.Args) != 2 {
+		log.Fatal("usage: antec-display /path/to/tempN_input")
+	}
+	c, err := readTemp(os.Args[1])
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Printf("%.3f °C; panel digits %v\n", c,
+		digits(Reading{Celsius: c, Valid: true}))
+}</code></pre></div>
   </div></details>
 </section>
 
 <section id="s3">
   <h2><span class="sec-num">3</span>Find the sensors</h2>
-  <p class="goal">Replace the hardcoded path with a scan: given a driver name like
-  <code>k10temp</code> and a preferred label like <code>Tctl</code>, return the matching
-  <code>tempN_input</code> path.</p>
+  <p class="goal">List the input paths and labels belonging to each CPU/GPU driver.
+  Gather candidates here; choose among them in step 4.</p>
 
-  <p>First, see the problem: reboot, or run <code>sudo udevadm trigger</code>, and check whether
-  <code>hwmon6</code> is still <code>k10temp</code>. If your program starts showing your network
-  card's temperature, that is why.</p>
+  <p><code>hwmon6</code> is an enumeration number, not a sensor identity. It can change after
+  a reboot. A path saved from a previous boot may exist but belong to a different driver.</p>
 
-  <p>The shape: enumerate <code>/sys/class/hwmon/hwmon*</code>, read each <code>name</code>,
-  keep the ones matching the driver you want, enumerate their <code>temp*_input</code> files,
-  read the matching <code>_label</code> beside each, and return the one whose label you asked
-  for — falling back to the first input if none matched.</p>
+  <h3>1. Discover directories by identity</h3>
+  <p>Write <code>hwmonByDriver(driver string) []string</code>. Enumerate
+  <code>/sys/class/hwmon/hwmon*</code>, read each <code>name</code> with your step-2 helper,
+  and keep matches. Skip entries whose name cannot be read; they might disappear during a scan.
+  An empty slice means no candidates, not a temperature of zero.</p>
+
+  <h3>2. Describe the inputs</h3>
+  <p>Define <code>sensor</code> with <code>path</code> and <code>label</code> string fields.
+  Write <code>tempInputs(dir string) []sensor</code>: enumerate <code>temp*_input</code>,
+  derive each <code>_label</code> path, and append a sensor. Keep an input even when its
+  label is missing.</p>
+  <p>For <code>temp3_input</code>, predict the label path before coding the string operation.
+  Return paths rather than temperatures so discovery does not have to repeat every second.</p>
+
+  <h3>3. Inspect before selecting</h3>
+  <p>Replace the one-path <code>main.go</code> with an inventory printer for
+  <code>k10temp</code>, <code>coretemp</code>, and <code>amdgpu</code>. Print each matching
+  directory and every input/label pair. Do not choose the first GPU yet.</p>
 
   <div class="call reach"><span class="tag">Reach for</span>
   <p><code>filepath.Glob</code> handles both enumerations and saves you a manual
@@ -465,30 +606,39 @@ func readTemp(path string) (float64, error) {
   and skip entries where that fails.</p></div>
 
   <div class="call gotcha"><span class="tag">Gotcha · numbering has holes, and sorts wrong</span>
-  <p><code>k10temp</code> has no <code>temp2</code> (foundations, section 07), so any
-  <code>for i := 1; i &lt;= n; i++</code> loop is wrong.</p>
+  <p>The example <code>k10temp</code> directory has no <code>temp2</code>. A loop over
+  numbers 1 through the input count would try a missing file and overlook <code>temp4</code>.</p>
   <p>And <code>filepath.Glob</code> returns results sorted lexically: <code>hwmon10</code> sorts
-  before <code>hwmon2</code> (this machine has both), so do not depend on the order.</p></div>
+  before <code>hwmon2</code>, so first in the list does not mean first device or best sensor.</p></div>
 
   <div class="call gotcha"><span class="tag">Gotcha · labels are optional</span>
   <p>A missing <code>_label</code> is normal (<code>spd5118</code>, <code>ath12k_hwmon</code>):
   treat the read failure as an empty string, or a RAM sensor you do not care about aborts the
   whole scan.</p></div>
 
+  <details><summary>Hint — accumulate a list</summary><div class="details-body">
+  <p>Start with <code>var out []sensor</code>, or
+  <code>make([]sensor, 0, len(matches))</code>. The latter reserves capacity but has length
+  zero. Add each entry with <code>out = append(out, sensor{path: p, label: label})</code>;
+  <code>append</code> returns the updated slice.</p>
+  <p><code>strings.TrimSuffix(p, "_input") + "_label"</code> transforms the path without
+  assuming which input number it contains.</p>
+  </div></details>
+
   <div class="call check"><span class="tag">Checkpoint</span>
-  <p>Print everything you found — directory, driver name, and each input with its label — and
-  diff it against the shell:</p>
+  <p>Compare the listed driver directories with the shell:</p>
   <div class="codewrap"><span class="label">shell</span>
 <pre><code>for d in /sys/class/hwmon/hwmon*; do echo "$d $(cat $d/name)"; done</code></pre></div>
-  <p>Confirm you found <code>k10temp</code>'s <code>temp3</code> and <code>temp4</code>, and that
-  the list is not empty (the symlink trap).</p>
+  <p>For one directory, compare the printed input paths with
+  <code>ls /sys/class/hwmon/hwmonN/temp*_input</code>. Substitute the number you just found.
+  On the example machine, <code>k10temp</code> has inputs 1, 3, and 4. Your list must reflect
+  the files actually present, including inputs without labels.</p>
   <label class="ck"><input type="checkbox" data-ck="go3"> mark step done</label></div>
 
   <details><summary>Reference implementation — step 3</summary><div class="details-body">
-  <div class="codewrap"><span class="label">sensors.go (continued)</span>
+  <div class="codewrap"><span class="label">sensors.go — add declarations and merge filepath into imports</span>
 <pre data-lang="go"><code>import (
 	"path/filepath"
-	"sort"
 )
 
 type sensor struct {
@@ -504,8 +654,6 @@ func tempInputs(dir string) []sensor {
 	if err != nil {
 		return nil
 	}
-	sort.Strings(matches)
-
 	out := make([]sensor, 0, len(matches))
 	for _, p := range matches {
 		// A missing label file is normal, not an error.
@@ -526,6 +674,22 @@ func hwmonByDriver(driver string) []string {
 	}
 	return out
 }</code></pre></div>
+  <div class="codewrap"><span class="label">main.go — replace</span>
+<pre data-lang="go"><code>package main
+
+import "fmt"
+
+func main() {
+	for _, driver := range []string{"k10temp", "coretemp", "amdgpu"} {
+		for _, dir := range hwmonByDriver(driver) {
+			fmt.Printf("%s %s\n", dir, driver)
+			for _, s := range tempInputs(dir) {
+				fmt.Printf("  %s label=%q\n", s.path, s.label)
+			}
+		}
+	}
+}</code></pre></div>
+  <p>Run <code>go run .</code>; this main no longer takes a path argument.</p>
   </div></details>
 </section>
 
@@ -539,15 +703,47 @@ func hwmonByDriver(driver string) []string {
   at startup; the heuristic can be wrong on another machine. Fold this into the sensor finder
   from step 3; the rule is harmless for <code>k10temp</code>, which has one instance.</p>
 
+  <h3>Implement two decisions, in order</h3>
+  <ol class="body">
+    <li>Write <code>findSensor(driver string, preferred ...string) (string, bool)</code>.
+    First choose the driver instance with the largest input list. With a strict
+    <code>&gt;</code> comparison, a tie keeps the first candidate encountered.</li>
+    <li>Within that instance, search for preferred labels in the caller's order.
+    <code>preferred ...string</code> accepts zero or more strings; inside the function it is
+    a <code>[]string</code>. Return the first matched path.</li>
+    <li>If there are inputs but no matching label, return the first input. If there are no
+    inputs, return <code>"", false</code>. Add <code>findCPU</code> and <code>findGPU</code>
+    wrappers for the driver/label preferences.</li>
+  </ol>
+  <p>Trace these candidates before running the finder:</p>
+  <div class="codewrap"><span class="label">selection exercise — fictional paths</span>
+<pre><code>amdgpu A: /A/temp1_input edge
+amdgpu B: /B/temp1_input junction
+          /B/temp2_input edge
+          /B/temp3_input mem
+
+preferred "edge"              → which path?
+preferred "missing", "mem"    → which path?
+preferred "missing"           → which fallback?</code></pre></div>
+  <details><summary>Hint — preference order determines loop order</summary><div class="details-body">
+  <p>Choose B before checking labels. Put the preferred-label loop outside the sensor loop;
+  otherwise file order can override the caller's preference. The answers are
+  <code>/B/temp2_input</code>, <code>/B/temp3_input</code>, and <code>/B/temp1_input</code>.</p>
+  </div></details>
+
   <div class="call check"><span class="tag">Checkpoint</span>
-  <p>Your finder should land on <code>hwmon6/temp1_input</code> (Tctl) for the CPU and
-  <code>hwmon2/temp1_input</code> (edge) for the GPU — <em>not</em> <code>hwmon3</code>. Confirm
-  the number is plausible against <code>sensors</code>, then load the GPU with something and
-  watch it move.</p>
+  <p>Replace the inventory main with a printer for the selected CPU/GPU paths and readings.
+  Run <code>go run .</code>. On an AMD machine, the CPU choice should belong to
+  <code>k10temp</code> and prefer <code>Tctl</code>; the GPU choice should belong to the
+  <code>amdgpu</code> instance with the most inputs and prefer <code>edge</code>.
+  Confirm against the inventory, labels, and <code>sensors</code>, rather than an old hwmon number.</p>
+  <p>Call <code>findSensor("nonexistent-driver")</code> temporarily. It should report no
+  selection without indexing an empty slice. If two real GPUs have equal input counts, this
+  heuristic cannot identify the one you want; a later path override can make that choice explicit.</p>
   <label class="ck"><input type="checkbox" data-ck="go4"> mark step done</label></div>
 
   <details><summary>Reference implementation — step 4</summary><div class="details-body">
-  <div class="codewrap"><span class="label">sensors.go (continued)</span>
+  <div class="codewrap"><span class="label">sensors.go — add</span>
 <pre data-lang="go"><code>// findSensor picks a temperature input for a driver, preferring the first
 // label in preferred that exists. Among several instances of the same driver
 // (a discrete GPU and an iGPU both bind amdgpu) the one exposing the most
@@ -583,6 +779,31 @@ func findCPU() (string, bool) {
 func findGPU() (string, bool) {
 	return findSensor("amdgpu", "edge")
 }</code></pre></div>
+  <div class="codewrap"><span class="label">main.go — replace</span>
+<pre data-lang="go"><code>package main
+
+import "log"
+
+func showSensor(name, path string, found bool) {
+	if !found {
+		log.Printf("%s: no sensor found", name)
+		return
+	}
+	c, err := readTemp(path)
+	if err != nil {
+		log.Printf("%s: %v", name, err)
+		return
+	}
+	log.Printf("%s: %s = %.3f °C", name, path, c)
+}
+
+func main() {
+	log.SetFlags(0)
+	cpuPath, cpuOK := findCPU()
+	gpuPath, gpuOK := findGPU()
+	showSensor("cpu", cpuPath, cpuOK)
+	showSensor("gpu", gpuPath, gpuOK)
+}</code></pre></div>
   </div></details>
 </section>
 
@@ -594,6 +815,18 @@ func findGPU() (string, bool) {
   <p>Discovery is the same directory-scanning shape as step 3 with a different matcher: walk
   <code>/sys/class/hidraw/*</code>, read each <code>device/uevent</code>, and look for the
   <code>HID_ID</code> line.</p>
+
+  <h3>Build and check the report before discovery</h3>
+  <ol class="body">
+    <li>Implement <code>send(f *os.File, p [12]byte) error</code>. A zero-initialized
+    <code>[13]byte</code> supplies the report-ID prefix; copy the packet into indexes 1–12.
+    Call <code>Write</code> once, check its error, then check the byte count.</li>
+    <li>Replace <code>main.go</code> with a one-shot sender for the 44.3/42.0 vector.
+    Add <code>--out</code> with the standard <code>flag</code> package. In file mode, create
+    or truncate the output file so a previous run cannot leave trailing bytes.</li>
+    <li>After the file check passes, implement <code>findHidraw() (string, bool)</code>.
+    With no <code>--out</code>, discover and open the device, then send the same packet.</li>
+  </ol>
 
   <div class="call gotcha"><span class="tag">Gotcha · eight hex digits, not four</span>
   <p><code>HID_ID=0003:00002022:00000522</code>: the vendor and product fields are zero-padded to
@@ -607,25 +840,37 @@ func findGPU() (string, bool) {
 
   <div class="call reach"><span class="tag">Reach for</span>
   <p><code>os.OpenFile(path, os.O_WRONLY, 0)</code>. Not <code>os.Create</code>: it adds
-  <code>O_CREAT|O_TRUNC</code> and opens read-write, and if the node is absent it creates a
-  regular file at that path, which every later write succeeds into. Not <code>os.O_RDWR</code>
-  either; you never read from this device, and a read would block on the IN endpoint.</p></div>
+  <code>O_CREAT|O_TRUNC</code> and opens read-write. If a device path is absent and permissions
+  allow it, <code>Create</code> can make an ordinary file there. Reserve it for the explicit
+  scratch-file branch. The device needs only <code>O_WRONLY</code>; this program never reads
+  its input endpoint.</p></div>
 
   <div class="call wrong"><span class="tag">Reaching for the wrong tool</span>
   <p><code>bufio.NewWriter</code> around the device, or writing the header and body in two
   calls: <code>hidraw</code> maps one <code>write()</code> syscall to one report (foundations,
-  rule two). <code>*os.File.Write</code> is one syscall; use it directly.</p></div>
+  rule two). Use an unbuffered <code>*os.File.Write</code> and confirm the syscall with
+  <code>strace</code>. Treat a short write as a failed report; sending the remaining bytes in
+  another call would be a second report, not a repair.</p></div>
+
+  <details><summary>Hint — keep the two open policies distinct</summary><div class="details-body">
+  <p>Parse <code>out := flag.String("out", "", "write one report to a scratch file")</code>
+  before opening anything. <code>*out != ""</code> selects <code>os.Create(*out)</code>.
+  Otherwise, discover the node and use <code>os.OpenFile</code>. Both branches can share
+  the same <code>send</code> call.</p>
+  </div></details>
 
   <div class="call check"><span class="tag">Checkpoint</span>
-  <p>Point the writer at a scratch file first (a temporary flag or a hardcoded path); no root
-  needed:</p>
+  <p>Build the one-shot sender and write a scratch file first; no root needed:</p>
   <div class="codewrap"><span class="label">shell</span>
-<pre><code>$ ./antec-display --out /tmp/panel.bin
+<pre><code>$ go build -o antec-display .
+$ ./antec-display --out /tmp/panel.bin
 $ wc -c /tmp/panel.bin
 13 /tmp/panel.bin
 $ hexdump -C /tmp/panel.bin
 00000000  00 55 aa 01 01 06 04 04  03 04 02 00 18</code></pre></div>
-  <p>Exactly 13 bytes.</p>
+  <p>Run the file command twice. Its size must stay 13, and the twelve bytes after the prefix
+  must match step 1. A file validates content and length; it does not prove the HID write
+  boundary.</p>
   <p>Then the definitive test, against the real node:</p>
   <div class="codewrap"><span class="label">shell</span>
 <pre><code>$ strace -e trace=write ./antec-display
@@ -640,7 +885,6 @@ write(3, "\0U\252\1\1\6\4\4\3\4\2\0\30", 13) = 13</code></pre></div>
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -689,6 +933,48 @@ func send(f *os.File, p [12]byte) error {
 	}
 	return nil
 }</code></pre></div>
+  <div class="codewrap"><span class="label">main.go — replace (one-shot sender)</span>
+<pre data-lang="go"><code>package main
+
+import (
+	"flag"
+	"fmt"
+	"log"
+	"os"
+)
+
+func runOnce(out string) error {
+	var f *os.File
+	var err error
+	if out != "" {
+		f, err = os.Create(out)
+	} else {
+		path, found := findHidraw()
+		if !found {
+			return fmt.Errorf("no device %04X:%04X found", vendorID, productID)
+		}
+		f, err = os.OpenFile(path, os.O_WRONLY, 0)
+	}
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	return send(f, buildPacket(
+		Reading{Celsius: 44.3, Valid: true},
+		Reading{Celsius: 42.0, Valid: true},
+	))
+}
+
+func main() {
+	log.SetFlags(0)
+	out := flag.String("out", "", "write one report to a scratch file")
+	flag.Parse()
+	if err := runOnce(*out); err != nil {
+		log.Fatal(err)
+	}
+}</code></pre></div>
+  <p><code>runOnce</code> returns before <code>main</code> calls <code>log.Fatal</code>, so
+  its deferred close runs on a send error too.</p>
   </div></details>
 </section>
 
@@ -696,9 +982,24 @@ func send(f *os.File, p [12]byte) error {
   <h2><span class="sec-num">6</span>The loop</h2>
   <p class="goal">Read both sensors, build, send, wait a second, repeat.</p>
 
+  <h3>Connect the pieces</h3>
+  <ol class="body">
+    <li>Write <code>readOrBlank(path string, ok bool) Reading</code>. A missing selection or
+    failed read returns <code>Reading{}</code>; a successful read returns a valid reading.
+    Log a read failure here, where you decide to continue.</li>
+    <li>Replace the one-shot main with startup discovery, one device open, and a ticker loop.
+    Keep the selected paths and the device handle outside the loop. Read fresh values inside it.</li>
+    <li>Each tick builds one packet from both readings and sends it. Check sensor-read errors
+    separately from display-write errors so the log identifies the failing operation.</li>
+  </ol>
+  <p>Before running it, trace a tick where the CPU read fails but the GPU reads 42.0.
+  Which digit bytes should be blank? Should the device handle be closed?</p>
+
   <div class="call reach"><span class="tag">Reach for</span>
   <p><code>time.NewTicker(time.Second)</code> rather than <code>time.Sleep</code> in a loop: a
-  ticker does not drift, and its channel is what step 8's <code>select</code> needs.</p></div>
+  sleep after each update adds the work time to the interval. A ticker schedules regular ticks
+  and can drop ticks if work is slow. Receiving from <code>tick.C</code> waits without spinning;
+  step 8 adds a second event to wait for.</p></div>
 
   <div class="call why"><span class="tag">Error policy in a daemon</span>
   <p>Inside the loop body, errors are not fatal. A sensor read that fails becomes a blank half
@@ -709,10 +1010,15 @@ func send(f *os.File, p [12]byte) error {
   <p>Watch the panel; the numbers move. Cross-check against <code>watch -n1 sensors</code>. Then
   check <code>top</code> — CPU should be near zero. If it is pegged at 100%, your ticker is not
   in the loop or you are draining the channel wrong.</p>
+  <p>Temporarily set <code>cpuPath</code> to a nonexistent path after discovery while leaving
+  <code>cpuOK</code> true. The CPU half should blank, the GPU should keep updating, and the
+  log should name the failed read. Restore the path afterward.</p>
+  <p>Discovery happens once in this version. A read failure does not trigger sensor
+  rediscovery; the reconnect logic in the next step is for the display device.</p>
   <label class="ck"><input type="checkbox" data-ck="go6"> mark step done</label></div>
 
   <details><summary>Reference implementation — step 6</summary><div class="details-body">
-  <div class="codewrap"><span class="label">main.go</span>
+  <div class="codewrap"><span class="label">main.go — replace</span>
 <pre data-lang="go"><code>package main
 
 import (
@@ -734,6 +1040,7 @@ func readOrBlank(path string, ok bool) Reading {
 }
 
 func main() {
+	log.SetFlags(0)
 	cpuPath, cpuOK := findCPU()
 	gpuPath, gpuOK := findGPU()
 	log.Printf("cpu sensor: %s", orNone(cpuPath, cpuOK))
@@ -782,6 +1089,23 @@ func orNone(path string, ok bool) string {
   that opens it if it is not already open, and a send that closes and forgets the handle on
   error so the next tick re-discovers it.</p>
 
+  <h3>Define the state transitions first</h3>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Before</th><th>Operation</th><th>After</th></tr></thead>
+    <tbody>
+      <tr><td><code>f == nil</code></td><td>Discovery/open fails</td><td>Still closed; retry later</td></tr>
+      <tr><td><code>f == nil</code></td><td>Open succeeds</td><td>Store handle and path</td></tr>
+      <tr><td><code>f != nil</code></td><td>Write succeeds</td><td>Keep the same handle</td></tr>
+      <tr><td><code>f != nil</code></td><td>Write fails</td><td>Close handle; clear handle and path</td></tr>
+    </tbody>
+  </table></div>
+  <p>Implement <code>display</code>, <code>ensureOpen</code>, <code>close</code>, and
+  <code>send</code> against this table. Use <code>*display</code> receivers: these methods
+  must update the stored object, not a copy of it. Its zero value is the closed state.</p>
+  <p>Then replace the main function's direct discovery/open/send code with
+  <code>var d display</code> and <code>d.send(p)</code>. Keep <code>readOrBlank</code> and
+  <code>orNone</code>. A device missing at startup now follows the same retry path as an unplug.</p>
+
   <div class="call gotcha"><span class="tag">Gotcha · re-run discovery, don't reuse the path</span>
   <p>After a replug the device may come back as a different <code>/dev/hidrawN</code>, and the
   remembered path may now be somebody else's keyboard. Re-run discovery.</p></div>
@@ -792,21 +1116,27 @@ func orNone(path string, ok bool) string {
   process exits. Close explicitly when you drop the handle.</p></div>
 
   <div class="call why"><span class="tag">Back off</span>
-  <p>Retry every couple of seconds, not in a tight loop.</p></div>
+  <p>After a failed send, wait two seconds before retrying. Step 8 makes that wait interruptible.
+  Sensor failures still blank a half without resetting the device.</p></div>
 
   <div class="call check"><span class="tag">Checkpoint</span>
-  <p>Make the device go away. Physically unplug the internal header, or do it in software:</p>
+  <p>Make the device unavailable using its USB authorization attribute. First locate
+  the current hidraw node and use <code>readlink -f /sys/class/hidraw/hidrawN/device</code>
+  to identify its parent USB device. The following uses <code>8-7</code> as an example;
+  substitute the device belonging to the panel.</p>
   <div class="codewrap"><span class="label">shell</span>
-<pre><code># readlink -f /sys/class/hidraw/hidraw0/device shows the USB device dir: .../usb8/8-7/...
+<pre><code># Example panel path: .../usb8/8-7/8-7:1.0/0003:2022:0522.../
 echo 0 | sudo tee /sys/bus/usb/devices/8-7/authorized
 sleep 2
 echo 1 | sudo tee /sys/bus/usb/devices/8-7/authorized</code></pre></div>
   <p>The program should log the failure, log a reopen a couple of seconds later, and keep
-  running. If it exits, the error is still escaping the loop.</p>
+  running. Start it while the panel is unavailable too. It should wait and recover when you
+  authorize the panel again. Check <code>ls /proc/PID/fd</code> before and after several retries;
+  the descriptor count should not keep growing.</p>
   <label class="ck"><input type="checkbox" data-ck="go7"> mark step done</label></div>
 
   <details><summary>Reference implementation — step 7</summary><div class="details-body">
-  <div class="codewrap"><span class="label">device.go (continued)</span>
+  <div class="codewrap"><span class="label">device.go — add declarations and merge log into imports</span>
 <pre data-lang="go"><code>// display owns the open device, reopening it after an unplug.
 type display struct {
 	f    *os.File
@@ -851,6 +1181,29 @@ func (d *display) send(p [12]byte) error {
 	}
 	return nil
 }</code></pre></div>
+  <div class="codewrap"><span class="label">main.go — replace main; keep readOrBlank and orNone; remove the os import</span>
+<pre data-lang="go"><code>func main() {
+	log.SetFlags(0)
+	cpuPath, cpuOK := findCPU()
+	gpuPath, gpuOK := findGPU()
+	log.Printf("cpu sensor: %s", orNone(cpuPath, cpuOK))
+	log.Printf("gpu sensor: %s", orNone(gpuPath, gpuOK))
+	if !cpuOK &amp;&amp; !gpuOK {
+		log.Fatal("no CPU or GPU sensor found under /sys/class/hwmon")
+	}
+
+	var d display
+	defer d.close()
+	tick := time.NewTicker(time.Second)
+	defer tick.Stop()
+	for range tick.C {
+		p := buildPacket(readOrBlank(cpuPath, cpuOK), readOrBlank(gpuPath, gpuOK))
+		if err := d.send(p); err != nil {
+			log.Printf("display: %v", err)
+			time.Sleep(2 * time.Second)
+		}
+	}
+}</code></pre></div>
   </div></details>
 </section>
 
@@ -859,7 +1212,20 @@ func (d *display) send(p [12]byte) error {
   <p class="goal">On SIGINT or SIGTERM, blank the panel and exit cleanly instead of leaving a
   stale number frozen on the case.</p>
 
-  <p>Nothing refreshes the display but you, so send the blank vector on the way out.</p>
+  <h3>Add a second event to the loop</h3>
+  <ol class="body">
+    <li>Create a context cancelled by SIGINT or SIGTERM with <code>signal.NotifyContext</code>.
+    It announces cancellation; it does not stop your loop automatically.</li>
+    <li>Replace <code>for range tick.C</code> with <code>for</code> and a <code>select</code>:
+    a tick performs an update; <code>ctx.Done()</code> performs cleanup and returns.</li>
+    <li>Replace the retry sleep with another <code>select</code> waiting for cancellation or
+    a two-second timer. Cancellation must leave the retry wait, then reach cleanup.</li>
+    <li>On shutdown, attempt one blank packet, log any failure, and close the handle.</li>
+  </ol>
+  <p>Trace SIGTERM during the retry wait. An unlabelled <code>break</code> inside a
+  <code>select</code> only exits that select, not the enclosing loop. In the reference,
+  cancellation leaves the inner select; the next loop iteration sees <code>ctx.Done()</code>
+  and runs the shutdown branch.</p>
 
   <div class="call reach"><span class="tag">Reach for</span>
   <p><code>signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)</code>,
@@ -877,18 +1243,21 @@ func (d *display) send(p [12]byte) error {
   reading. Blank explicitly on the shutdown path.</p></div>
 
   <div class="call check"><span class="tag">Checkpoint</span>
-  <p>Run it in the foreground and press Ctrl-C: the panel should show <code>--.-</code> within
+  <p>Build with <code>go build -o antec-display .</code> and run
+  <code>./antec-display</code> in the foreground. Press Ctrl-C: the panel should show <code>--.-</code> within
   about a second and the process should exit 0 — check with <code>echo $?</code>. Then
   <code>kill -TERM</code> the PID and confirm identical behaviour.</p>
   <p>Then <code>kill -KILL</code> it. The panel keeps its stale reading, because SIGKILL cannot
   be caught by anything.</p>
+  <p>Repeat SIGTERM while the display is unavailable and the program is backing off. It
+  should exit without waiting for the two-second timer; blanking may fail because the device
+  is absent. Cancellation wakes the channel waits, but does not interrupt an already-running
+  file read or write.</p>
   <label class="ck"><input type="checkbox" data-ck="go8"> mark step done</label></div>
 
   <details><summary>Reference implementation — step 8</summary><div class="details-body">
-  <div class="codewrap"><span class="label">main.go (revised)</span>
-<pre data-lang="go"><code>package main
-
-import (
+  <div class="codewrap"><span class="label">main.go — replace imports and main; keep readOrBlank and orNone</span>
+<pre data-lang="go"><code>import (
 	"context"
 	"log"
 	"os"
@@ -920,7 +1289,9 @@ func main() {
 		select {
 		case &lt;-ctx.Done():
 			log.Print("shutting down, blanking panel")
-			d.send(buildPacket(Reading{}, Reading{})) // best effort
+			if err := d.send(buildPacket(Reading{}, Reading{})); err != nil {
+				log.Printf("blank display: %v", err)
+			}
 			d.close()
 			return
 
@@ -948,39 +1319,59 @@ func main() {
   <p class="goal">A static binary, a udev rule, a systemd unit, and a panel that comes back by
   itself after a reboot.</p>
 
+  <p>First run the final program in the foreground through the checks from steps 6–8.
+  Then verify the code and build the binary:</p>
+
   <div class="codewrap"><span class="label">shell</span>
-<pre><code>CGO_ENABLED=0 go build -ldflags="-s -w" -o antec-display .
+<pre><code>go test ./...
+go vet ./...
+CGO_ENABLED=0 go build -o antec-display .
 ldd antec-display     # "not a dynamic executable"</code></pre></div>
 
-  <p><code>CGO_ENABLED=0</code> gives you a static binary with nothing to install alongside it,
-  unlike the Python version.</p>
+  <p>For this standard-library Linux program, <code>CGO_ENABLED=0</code> produces a static
+  binary. It still needs the kernel's sensor files and device node. Keep debug information
+  while learning; <code>-ldflags="-s -w"</code> is an optional size reduction later.</p>
 
   <p>Reuse the repo's <a href="70-antec-display.rules">udev rule</a> and
-  <a href="antec-display.service">systemd unit</a>; only <code>ExecStart</code> changes. Note
-  <code>ProtectSystem=strict</code> in the unit: it makes the filesystem read-only except
-  <code>/dev</code>, <code>/proc</code> and <code>/sys</code>, which is all this program
-  needs.</p>
+  <a href="antec-display.service">systemd unit</a>; set <code>ExecStart</code> to your binary.
+  <code>ProtectSystem=strict</code> makes the filesystem read-only except
+  <code>/dev</code>, <code>/proc</code> and <code>/sys</code>; this program reads sysfs and
+  writes the device node. <code>Restart=always</code> restarts it after process exit, but
+  unplug recovery remains the program's responsibility while it is running.</p>
+
+  <p>The following assumes you are in the Go module directory. Set <code>TUTORIAL</code>
+  to this repository's <code>.tutorial</code> directory so the asset paths resolve:</p>
 
   <div class="codewrap"><span class="label">shell</span>
-<pre><code>sudo install -m0755 antec-display /usr/local/bin/antec-display
-sudo cp 70-antec-display.rules /etc/udev/rules.d/
-sudo cp antec-display.service /etc/systemd/system/
+<pre><code>TUTORIAL=/absolute/path/to/iunit4linux/.tutorial
+sudo install -m0755 antec-display /usr/local/bin/antec-display
+sudo cp "$TUTORIAL/70-antec-display.rules" /etc/udev/rules.d/
+sudo cp "$TUTORIAL/antec-display.service" /etc/systemd/system/
 sudo sed -i 's|^ExecStart=.*|ExecStart=/usr/local/bin/antec-display|' \
   /etc/systemd/system/antec-display.service
 sudo udevadm control --reload-rules &amp;&amp; sudo udevadm trigger --subsystem-match=hidraw
 sudo systemctl daemon-reload
 sudo systemctl enable --now antec-display</code></pre></div>
 
-  <div class="call why"><span class="tag">You do not need a logging library</span>
-  <p>journald captures stdout and stderr with timestamps, so <code>log.Printf</code> is
-  sufficient; no <code>zap</code>, <code>logrus</code> or <code>slog</code> configuration.
-  <code>log.SetFlags(0)</code> avoids a second timestamp.</p></div>
+  <p>journald captures stdout and stderr with timestamps. The existing
+  <code>log.Printf</code> calls name the selected sensors, device opens, and failures;
+  <code>log.SetFlags(0)</code> avoids a second timestamp.</p>
 
-  <div class="call reach"><span class="tag">Optional</span>
-  <p>A few flags via the <code>flag</code> package rather than <code>cobra</code>:
-  <code>--out</code> to write to a file instead of the device, <code>--once</code> to send one
-  packet and exit, <code>--interval</code>, and explicit sensor path overrides for machines
-  where the heuristic guesses wrong.</p></div>
+  <h3>Next changes — one at a time</h3>
+  <p>Choose a change that addresses something you observed. State its expected behavior,
+  implement it, and repeat the affected checkpoint before installing the new binary.</p>
+  <ul>
+    <li><strong>Configurable interval:</strong> add <code>flag.Duration</code>, reject zero
+    or negative durations before creating the ticker, and verify the write frequency.</li>
+    <li><strong>Explicit sensor paths:</strong> add CPU/GPU flags that override discovery.
+    Log whether each path was discovered or supplied, then test a bad override.</li>
+    <li><strong>Offline inspection:</strong> bring the step-5 <code>--out</code> mode into
+    the final program with <code>--once</code>. Verify one 13-byte report; the daemon's
+    shutdown blank must not append a second report to that file.</li>
+    <li><strong>Sensor recovery:</strong> rediscover a sensor after a read failure or an absent
+    startup selection. Use a bounded retry interval, and test that one missing sensor does
+    not stop the other half.</li>
+  </ul>
 
   <div class="call check"><span class="tag">Checkpoint</span>
   <p><code>systemctl status antec-display</code> is clean and
@@ -989,6 +1380,9 @@ sudo systemctl enable --now antec-display</code></pre></div>
   <p>Restart it twice. Then <code>systemctl stop</code> and confirm the panel blanks rather than
   freezing — that is step 8 working through systemd's SIGTERM.</p>
   <p>Then reboot and confirm it still finds the right hidraw node and hwmon directories.</p>
+  <p>Without looking at the code, trace one successful update, one sensor-read failure,
+  one display-write failure, and SIGTERM. For each, name the values that change, the handle
+  that stays open or closes, and the next event the program waits for.</p>
   <label class="ck"><input type="checkbox" data-ck="go9"> mark step done</label></div>
 
   <div class="mobile-next">
@@ -1001,7 +1395,7 @@ sudo systemctl enable --now antec-display</code></pre></div>
 </main>
 
 <footer class="footer">
-  <p>Reference code verified against Go 1.27.0 on Linux 7.2.5. Protocol details on the
+  <p>Go reference checkpoints tested with Go 1.27.0. Protocol details on the
   <a href="foundations.html">foundations page</a>.</p>
 </footer>
 
