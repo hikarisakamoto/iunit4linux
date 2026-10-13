@@ -7,7 +7,27 @@ type Reading struct {
 	Valid bool
 }
 
+var (
+	blank = [3]byte{0xEE, 0xEE, 0xEE}
+	min   = 0.0
+	max   = 99.9
+)
+
 func digits(r Reading) [3]byte {
-	v := int(math.Ceil(r.Temp * 10))
+	if !r.Valid {
+		return blank
+	}
+
+	t := r.Temp
+
+	if t > max {
+		t = max
+	}
+
+	if t < min {
+		t = min
+	}
+
+	v := int(math.Ceil(t * 10))
 	return [3]byte{byte(v / 100), byte(v / 10 % 10), byte(v % 10)}
 }
