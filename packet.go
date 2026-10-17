@@ -20,14 +20,14 @@ func digits(r Reading) [3]byte {
 
 	t := r.Temp
 
-	if t > max {
-		t = max
-	}
-
 	if t < min {
 		t = min
 	}
 
-	v := int(math.Ceil(t * 10))
+	if t > max {
+		t = max
+	}
+
+	v := int(math.Ceil(t))
 	return [3]byte{byte(v / 100), byte(v / 10 % 10), byte(v % 10)}
 }

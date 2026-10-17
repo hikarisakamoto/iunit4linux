@@ -34,11 +34,13 @@ scratch. Open the HTML files in a browser:
 | Page | What's in it |
 |------|--------------|
 | [`foundations.html`](foundations.html) | The hardware, the HID report descriptor decoded, the protocol, `hwmon`, permissions, and a debugging toolkit. Language-agnostic — read it first. |
-| [`go.html`](go.html) | Nine incremental builds in Go: trace values, test the encoding, inspect sensors, then handle device state and shutdown. Assumes familiar Go syntax. |
+| [`go.html`](go.html) | Nine incremental builds in Go, with optional, linkable concept notes for arrays, slices, `copy`, discovery lists, and later language features. |
 | [`rust.html`](rust.html) | The same nine steps in Rust, for someone who has never written it but knows some Go. |
 
 The Go steps start with small implementation tasks and concrete checks, with
-collapsed hints before the reference code. Guidance decreases as the pieces come
+collapsed hints before the reference code. Concept notes expand in place without
+interrupting the main tasks; the shortcuts near the top link directly to each note.
+Scratch examples stay separate from your implementation. Guidance decreases as the pieces come
 together; later exercises cover reconnect state, cancellation, and changes you can
 make after the service works. The reference checkpoints are tested with Go 1.27.0.
 

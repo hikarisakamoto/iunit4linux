@@ -154,6 +154,15 @@ details[open] > summary{border-bottom:1px solid var(--line-soft);color:var(--tex
 details > summary:hover{color:var(--text);background:var(--surface-2)}
 details > summary:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
 .details-body{padding:1rem 1.1rem .1rem}
+.concept{border-left:3px solid var(--accent);scroll-margin-top:1.5rem}
+.concept > summary{font-family:var(--sans);font-size:.9rem;letter-spacing:0;color:var(--accent-ink);
+  display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:baseline;gap:.5rem;min-height:44px}
+.concept .concept-time{font-family:var(--mono);font-size:.7rem;color:var(--dim);white-space:nowrap}
+.concept:target{outline:2px solid var(--accent);outline-offset:3px}
+.concept .details-body > :last-child{margin-bottom:1rem}
+.concept-links{display:flex;flex-wrap:wrap;gap:.5rem 1rem;font-size:.85rem}
+.concept-index ul{margin-bottom:1rem}
+@media (hover:none){.copy{opacity:1}}
 .theme-toggle{position:fixed;top:1rem;right:1rem;z-index:10;font-family:var(--mono);
   font-size:.7rem;letter-spacing:.1em;text-transform:uppercase;background:var(--surface);
   color:var(--dim);border:1px solid var(--line);border-radius:2px;padding:.4rem .7rem;cursor:pointer}
@@ -175,8 +184,8 @@ details > summary:focus-visible{outline:2px solid var(--accent);outline-offset:-
   <p class="kicker">Antec panel · Go</p>
   <h1>Build it in Go</h1>
   <p class="standfirst">Build a temperature-display service one working piece at a time.
-  Go syntax is assumed; data flow, tests, error handling, and device state are worked through
-  as you need them.</p>
+  Basic Go syntax helps; optional concept notes unpack arrays, slices, copying, and other
+  unfamiliar pieces right where you need them.</p>
   <div class="masthead-meta">
     <span class="chip">stdlib only</span>
     <span class="chip">no cgo</span>
@@ -236,6 +245,31 @@ go mod init antec-display</code></pre></div>
 go test ./...</code></pre></div>
   <p>Tests run without a <code>main()</code> function. <code>go run .</code> and
   <code>go build .</code> need one; you add it in step 2.</p>
+
+  <details class="concept concept-index" id="concepts">
+    <summary>Concept shortcuts — open only what you need <span class="concept-time">optional</span></summary>
+    <div class="details-body">
+    <p>The blue <strong>Concept</strong> notes are small detours, not extra tasks. Expand one
+    in place, then collapse it to continue. Each has a permanent link you can bookmark or share;
+    following that link opens the explanation automatically.</p>
+    <ul>
+      <li><strong>Packet building:</strong> <a href="#concept-byte-arrays">bytes and arrays</a> ·
+      <a href="#concept-slices">slices and shared storage</a> · <a href="#concept-copy">copy, destination first</a> ·
+      <a href="#concept-table-tests">slices of test cases</a></li>
+      <li><strong>Reading and discovery:</strong> <a href="#concept-byte-text">bytes versus text</a> ·
+      <a href="#concept-append">append, length, and capacity</a> · <a href="#concept-range">range and the blank identifier</a> ·
+      <a href="#concept-variadic">variadic arguments and slice assignment</a></li>
+      <li><strong>Sending and running:</strong> <a href="#concept-report">array → slice → Write</a> ·
+      <a href="#concept-lifetimes">values inside and outside the loop</a> ·
+      <a href="#concept-receivers">pointer receivers and copies</a> ·
+      <a href="#concept-select">channels and select</a> · <a href="#concept-build">source, binary, and service</a></li>
+    </ul>
+    <p>Examples labelled <em>scratch</em> are experiments, not additions to your project.
+    To run one, put it inside <code>func main()</code> in a separate file with
+    <code>package main</code> and <code>import "fmt"</code>, then run
+    <code>go run /path/to/scratch.go</code>. Do not place a second main function in this module.</p>
+    </div>
+  </details>
 </section>
 
 <section id="s1">
@@ -255,6 +289,33 @@ go test ./...</code></pre></div>
   choice, not a checksum or HID requirement. For <code>44.31</code>, rounding gives
   <code>44.3</code>; <code>math.Ceil(c * 10)</code> gives <code>44.4</code>. Add a test for that
   difference if your current implementation uses <code>Ceil</code>.</p>
+
+  <details class="concept" id="concept-byte-arrays">
+    <summary>Concept · What is a byte array? <span class="concept-time">2 min</span></summary>
+    <div class="details-body">
+    <p>A <code>byte</code> is Go's other name for <code>uint8</code>: an unsigned integer from
+    0 to 255. It is a number, not necessarily a character. <code>4</code> and <code>0x04</code>
+    are the same value written in decimal and hexadecimal. The character <code>'4'</code>
+    has the value 52 (<code>0x34</code>), which is not the digit value this panel expects.</p>
+    <p><code>[3]byte</code> means an <strong>array of exactly three bytes</strong>. The length
+    is part of its type: <code>[3]byte</code> and <code>[12]byte</code> are different types.
+    Indexes start at zero. A declared array starts with every element set to zero.</p>
+    <div class="codewrap"><span class="label">scratch — inside main</span>
+<pre data-lang="go"><code>var empty [3]byte
+c := [3]byte{4, 4, 3}
+other := c // array assignment copies all three values
+other[0] = 9
+fmt.Println(empty) // [0 0 0]
+fmt.Println(c)     // [4 4 3] — unchanged
+fmt.Println(other) // [9 4 3]
+fmt.Println(c[0], c[2], len(c)) // 4 3 3</code></pre></div>
+    <p>Our digit triple is always three bytes and our packet always twelve, so arrays express
+    those fixed sizes. Returning an array from <code>digits</code> gives the caller an array
+    value; it does not give them a view into <code>blank</code>.</p>
+    <p class="concept-links"><a href="#concept-byte-arrays">Link to this note</a>
+    <a href="https://go.dev/tour/moretypes/6">Go Tour: arrays</a></p>
+    </div>
+  </details>
   <div class="codewrap"><span class="label">packet_test.go — first test</span>
 <pre data-lang="go"><code>package main
 
@@ -281,6 +342,22 @@ func TestDigits(t *testing.T) {
   is a slice of cases with an input and an expected result, followed by the same assertion
   for each case.</p>
 
+  <details class="concept" id="concept-table-tests">
+    <summary>Concept · Reading a slice of test cases <span class="concept-time">1 min</span></summary>
+    <div class="details-body">
+    <p>Read <code>[]struct { in Reading; want [3]byte }</code> from the outside in:
+    <code>[]</code> is a slice (a list here), each element is a struct, and each struct holds
+    an input plus its expected array. The type has no name because only this test needs it.</p>
+    <p>In <code>for _, tc := range cases</code>, <code>tc</code> is the current case;
+    <code>_</code> discards its index. <code>tc.in</code> and <code>tc.want</code> access the
+    two fields. We compare two <code>[3]byte</code> arrays, not the slice of cases itself.</p>
+    <p>If the brackets are the confusing part, open <a href="#concept-slices">the slice note</a>.
+    You can keep the first single-case test until you are comfortable adding a table.</p>
+    <p class="concept-links"><a href="#concept-table-tests">Link to this note</a>
+    <a href="https://go.dev/wiki/TableDrivenTests">Go Wiki: table-driven tests</a></p>
+    </div>
+  </details>
+
   <h3>3. Assemble the packet</h3>
   <p>Implement <code>func buildPacket(cpu, gpu Reading) [12]byte</code>. Fill the fixed bytes,
   place the CPU and GPU triples, then compute byte 11 from bytes 0–10. Keep the report-ID
@@ -291,6 +368,84 @@ func TestDigits(t *testing.T) {
   <code>c[:]</code> views all three elements of the array <code>c</code>.
   <code>copy(p[5:8], c[:])</code> copies those values into the packet. Changing the slice's
   elements changes the underlying array.</p></div>
+
+  <details class="concept" id="concept-slices">
+    <summary>Concept · A slice is a view, not a new array <span class="concept-time">3 min</span></summary>
+    <div class="details-body">
+    <p><code>[]byte</code> is a <strong>slice of bytes</strong>. Unlike <code>[3]byte</code>,
+    its type does not specify a length. Think of a slice as a small description containing
+    a reference to an underlying array, a length, and a capacity—not the elements themselves.</p>
+    <div class="tablewrap"><table>
+      <caption>Three expressions you will use in the packet builder</caption>
+      <thead><tr><th>Expression</th><th>Type</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td><code>var p [12]byte</code></td><td><code>[12]byte</code></td><td>Twelve stored byte values, initially zero</td></tr>
+        <tr><td><code>p[5:8]</code></td><td><code>[]byte</code></td><td>A view of three values: indexes 5, 6, 7</td></tr>
+        <tr><td><code>p[:]</code></td><td><code>[]byte</code></td><td>A view of all twelve values</td></tr>
+      </tbody>
+    </table></div>
+    <div class="codewrap"><span class="label">index map — upper bound excluded</span>
+<pre><code>p index:   0  1  2  3  4 [5  6  7] 8  9 10 11
+                         └ p[5:8] ┘
+slice index:              0  1  2
+len(p[5:8]) = 8 - 5 = 3</code></pre></div>
+    <p>Omit the lower bound to start at zero (<code>p[:11]</code>); omit the upper bound to
+    stop at the length (<code>p[8:]</code>). For these array slices, keep
+    <code>0 ≤ low ≤ high ≤ len(p)</code>. An invalid runtime bound panics; <code>p[12]</code>
+    is not an element of a twelve-byte array.</p>
+    <div class="codewrap"><span class="label">scratch — predict p before reading the comment</span>
+<pre data-lang="go"><code>var p [12]byte
+view := p[5:8]
+view[0] = 4 // view[0] is p[5], not p[0]
+fmt.Println(len(view)) // 3
+fmt.Println(p[0], p[5]) // 0 4
+anotherView := view
+anotherView[1] = 7
+fmt.Println(p[6]) // 7 — both slices refer to the same storage</code></pre></div>
+    <p><strong>Slicing does not copy the elements.</strong> Changing an element through a slice
+    changes the array it views. This is exactly why <code>copy(p[5:8], c[:])</code> can fill
+    part of <code>p</code>. To learn how a slice grows, see
+    <a href="#concept-append">append, length, and capacity in step 3</a>.</p>
+    <p class="concept-links"><a href="#concept-slices">Link to this note</a>
+    <a href="https://go.dev/tour/moretypes/7">Go Tour: slices</a></p>
+    </div>
+  </details>
+
+  <details class="concept" id="concept-copy">
+    <summary>Concept · Read copy(destination, source) one piece at a time <span class="concept-time">3 min</span></summary>
+    <div class="details-body">
+    <p><code>copy</code> is a built-in function. For our byte slices,
+    <code>copy(dst, src)</code> copies values from the source into the destination's existing
+    elements, starting at index zero of each slice. <strong>Destination first.</strong>
+    It returns the number copied: <code>min(len(dst), len(src))</code>. It does not grow either slice.</p>
+    <div class="codewrap"><span class="label">scratch — the CPU triple, in isolation</span>
+<pre data-lang="go"><code>var p [12]byte
+c := [3]byte{4, 4, 3}
+n := copy(p[5:8], c[:])
+fmt.Println(n) // 3
+fmt.Println(p) // [0 0 0 0 0 4 4 3 0 0 0 0]
+c[0] = 9
+fmt.Println(p[5]) // 4 — values were copied; p does not share c's storage</code></pre></div>
+    <ol class="body">
+      <li><code>p[5:8]</code> views the three destination slots in the packet.</li>
+      <li><code>c[:]</code> views the three source slots in the digit array.</li>
+      <li><code>copy</code> does the equivalent of <code>p[5] = c[0]</code>,
+      <code>p[6] = c[1]</code>, and <code>p[7] = c[2]</code>.</li>
+    </ol>
+    <p>The views share storage with their respective arrays, but copying values between them
+    does <em>not</em> link the two arrays. <code>copy(p[5:7], c[:])</code> would silently copy
+    only two values. Capacity does not change this rule; the destination needs enough <em>length</em>.</p>
+    <p><strong>Why the temporary variable?</strong> <code>digits(cpu)</code> returns an array
+    value that Go does not let you slice directly: it is not <em>addressable</em> (roughly,
+    a value whose storage you can refer to). <code>c := digits(cpu)</code> gives you a local
+    array variable, and <code>c[:]</code> can view its storage. This restriction concerns
+    slicing arrays, not every function result: a returned slice can be sliced again.</p>
+    <p><strong>Quick check:</strong> what does <code>copy(p[5:8], c[:2])</code> return, and
+    which packet slot is untouched? Answer: 2; index 7 is untouched.</p>
+    <p class="concept-links"><a href="#concept-copy">Link to this note</a>
+    <a href="https://pkg.go.dev/builtin#copy">Go reference: copy</a></p>
+    </div>
+  </details>
 
   <div class="call gotcha"><span class="tag">Gotcha · you cannot slice a returned array</span>
   <p><code>copy(p[5:8], digits(cpu)[:])</code> does not compile: <em>cannot slice unaddressable
@@ -450,6 +605,27 @@ digits         [3]byte  [4 7 1]</code></pre></div>
   <p>Keep reading and display rounding separate. <code>readTemp</code> should return 47.125,
   not 47.1; the packet builder decides what fits on the panel.</p>
 
+  <details class="concept" id="concept-byte-text">
+    <summary>Concept · Why does a numeric file return []byte? <span class="concept-time">2 min</span></summary>
+    <div class="details-body">
+    <p><code>os.ReadFile</code> reads raw bytes, whether the file contains text, an image, or a
+    device report. Its result is a <a href="#concept-slices">byte slice</a>. For this sensor
+    file, the bytes encode text: 52 is the character <code>'4'</code>, and 10 is the newline.</p>
+    <div class="codewrap"><span class="label">scratch — conversion is not parsing</span>
+<pre data-lang="go"><code>b := []byte{52, 55, 49, 50, 53, 10}
+s := string(b)
+b[0] = 57 // change the byte slice to start with '9'
+fmt.Printf("%q\n", s) // "47125\n" — the string stays unchanged
+fmt.Printf("%q\n", b) // "97125\n"</code></pre></div>
+    <p><code>string(b)</code> creates a string with those bytes, not the integer 47125.
+    Strings are immutable; changing <code>b</code> later does not change <code>s</code>.
+    Trimming removes the newline, then <code>strconv.Atoi</code> interprets the decimal text
+    as a number. In contrast, our packet uses <em>raw digit values</em> like 4, not text bytes like 52.</p>
+    <p class="concept-links"><a href="#concept-byte-text">Link to this note</a>
+    <a href="https://go.dev/blog/strings">Go blog: strings, bytes, runes and characters</a></p>
+    </div>
+  </details>
+
   <h3>2. Implement the reader</h3>
   <p>In <code>sensors.go</code>, write <code>readSysfs(path string) (string, error)</code>
   to read and trim, then <code>readTemp(path string) (float64, error)</code> to parse and
@@ -586,10 +762,73 @@ func main() {
   <p>For <code>temp3_input</code>, predict the label path before coding the string operation.
   Return paths rather than temperatures so discovery does not have to repeat every second.</p>
 
+  <details class="concept" id="concept-append">
+    <summary>Concept · Build a list with append; distinguish length from capacity <span class="concept-time">3 min</span></summary>
+    <div class="details-body">
+    <p>The same slice idea works for any element type: <code>[]byte</code> holds bytes,
+    <code>[]string</code> holds paths, and <code>[]sensor</code> holds sensor structs.
+    Discovery needs a slice because you do not know the number of matches ahead of time.</p>
+    <p><code>len(s)</code> counts the elements you can access now. <code>cap(s)</code> counts
+    the slots available from the start of this slice in its backing array. Spare capacity
+    is room for growth, not extra elements you can index immediately.</p>
+    <div class="codewrap"><span class="label">scratch — same list-building pattern as discovery</span>
+<pre data-lang="go"><code>var paths []string // nil slice: no backing array yet
+fmt.Println(len(paths), cap(paths)) // 0 0
+paths = append(paths, "temp1_input")
+fmt.Println(len(paths), paths[0]) // 1 temp1_input
+
+out := make([]string, 0, 3) // length 0, capacity 3
+fmt.Println(len(out), cap(out)) // 0 3
+// out[0] = "temp1_input" would panic: there is no element 0 yet.
+out = append(out, "temp1_input")
+fmt.Println(len(out), cap(out)) // 1 3
+
+alreadyThree := make([]string, 3) // length 3: three empty strings
+alreadyThree = append(alreadyThree, "temp1_input")
+fmt.Printf("%q\n", alreadyThree) // ["" "" "" "temp1_input"]</code></pre></div>
+    <p><strong>Always keep the result:</strong> <code>out = append(out, item)</code>.
+    A slice's backing array cannot grow. If there is space, <code>append</code> reuses it;
+    otherwise it allocates a larger array and copies the existing elements. In both cases
+    the returned slice has the new length. Do not rely on an exact growth factor.</p>
+    <p><code>make([]sensor, 0, len(matches))</code> reserves room for the scan's matches without
+    inserting empty sensors. <code>var out []sensor</code> also works and is a simpler start.
+    A nil slice and an empty non-nil slice both have length zero; you can range over or append
+    to either. Check <code>len(out) == 0</code> when you mean “no candidates.”</p>
+    <p><strong>Sharing caveat:</strong> assigning <code>b := out</code> copies the slice
+    description, not its elements. An append might reuse shared storage or switch to new storage.
+    Do not use append as a way to obtain an independent copy. Revisit
+    <a href="#concept-copy">copy</a> when you need separate storage (for these byte, string,
+    and sensor elements; nested slices or pointers would still share their referenced data).</p>
+    <p class="concept-links"><a href="#concept-append">Link to this note</a>
+    <a href="https://go.dev/tour/moretypes/15">Go Tour: appending to a slice</a></p>
+    </div>
+  </details>
+
   <h3>3. Inspect before selecting</h3>
   <p>Replace the one-path <code>main.go</code> with an inventory printer for
   <code>k10temp</code>, <code>coretemp</code>, and <code>amdgpu</code>. Print each matching
   directory and every input/label pair. Do not choose the first GPU yet.</p>
+
+  <details class="concept" id="concept-range">
+    <summary>Concept · What do range, _, and sensor{…} mean here? <span class="concept-time">2 min</span></summary>
+    <div class="details-body">
+    <p><code>for i, p := range matches</code> visits each element of the slice:
+    <code>i</code> is its index and <code>p</code> its value. When the index is not needed,
+    <code>for _, p := range matches</code> discards it. With only one variable,
+    <code>for i := range matches</code> gives indexes, <em>not paths</em>.</p>
+    <p><code>sensor{path: p, label: label}</code> constructs one struct using named fields.
+    <code>out = append(out, sensor{path: p, label: label})</code> adds that value to the list.
+    Later, <code>for _, s := range out</code> gives you a copy of each struct, so
+    <code>s.label = "new"</code> would not update <code>out</code>. Use
+    <code>out[i].label = "new"</code> if you intend to update the stored element.</p>
+    <p>In <code>label, _ := readSysfs(...)</code>, <code>_</code> instead discards the second
+    return value—the error. We do that deliberately for optional labels, not temperature
+    readings. <code>if name, err := readSysfs(...); err == nil</code> declares values local to
+    that <code>if</code>, then tests the error before using the name.</p>
+    <p class="concept-links"><a href="#concept-range">Link to this note</a>
+    <a href="https://go.dev/tour/moretypes/16">Go Tour: range</a></p>
+    </div>
+  </details>
 
   <div class="call reach"><span class="tag">Reach for</span>
   <p><code>filepath.Glob</code> handles both enumerations and saves you a manual
@@ -716,6 +955,28 @@ func main() {
     wrappers for the driver/label preferences.</li>
   </ol>
   <p>Trace these candidates before running the finder:</p>
+  <details class="concept" id="concept-variadic">
+    <summary>Concept · ...string and best = s are still slices <span class="concept-time">2 min</span></summary>
+    <div class="details-body">
+    <p>In a parameter list, <code>preferred ...string</code> accepts zero or more string
+    arguments. Inside the function, <code>preferred</code> is a <code>[]string</code>, so
+    <code>range</code> visits labels in the order supplied by the caller.</p>
+    <div class="codewrap"><span class="label">call shapes — not additional project code</span>
+<pre data-lang="go"><code>findSensor("amdgpu")                // no preferred labels
+findSensor("amdgpu", "edge", "mem") // two preferred labels
+labels := []string{"edge", "mem"}
+findSensor("amdgpu", labels...)     // expand an existing slice into arguments</code></pre></div>
+    <p><code>best = s</code> in the reference copies a slice description, not every sensor.
+    Both slices now refer to the same backing array. That is fine here: the finder only
+    reads the selected list. The array remains available after the helper returns; it is not
+    invalidated just because the helper's local variable goes out of scope.</p>
+    <p>Before <code>best[0]</code>, check <code>len(best) != 0</code>. A nil slice is a valid
+    empty list, but indexing it panics. This is why “no sensor” uses <code>"", false</code>
+    rather than guessing a path.</p>
+    <p class="concept-links"><a href="#concept-variadic">Link to this note</a>
+    <a href="https://go.dev/ref/spec#Passing_arguments_to_..._parameters">Go specification: variadic arguments</a></p>
+    </div>
+  </details>
   <div class="codewrap"><span class="label">selection exercise — fictional paths</span>
 <pre><code>amdgpu A: /A/temp1_input edge
 amdgpu B: /B/temp1_input junction
@@ -827,6 +1088,32 @@ func main() {
     <li>After the file check passes, implement <code>findHidraw() (string, bool)</code>.
     With no <code>--out</code>, discover and open the device, then send the same packet.</li>
   </ol>
+
+  <details class="concept" id="concept-report">
+    <summary>Concept · Trace the array → slice → Write handoff <span class="concept-time">2 min</span></summary>
+    <div class="details-body">
+    <p><code>send(f *os.File, p [12]byte)</code> receives the packet array by value: it has its
+    own twelve-byte array. The writer creates a separate thirteen-byte array, whose initial
+    zeros include the report-ID prefix.</p>
+    <div class="codewrap"><span class="label">scratch — no file or hardware needed</span>
+<pre data-lang="go"><code>p := [12]byte{0x55, 0xAA, 1, 1, 6, 4, 4, 3, 4, 2, 0, 0x18}
+var buf [13]byte
+n := copy(buf[1:], p[:])
+fmt.Println(n, len(buf[1:])) // 12 12
+fmt.Printf("% X\n", buf) // 00 55 AA 01 01 06 04 04 03 04 02 00 18</code></pre></div>
+    <p><code>buf[1:]</code> views indexes 1 through 12, so <code>buf[0]</code> stays zero.
+    <code>p[:]</code> views the full source array. Then <code>f.Write(buf[:])</code> passes a
+    view of <em>all thirteen bytes</em> to an API that accepts <code>[]byte</code>, not
+    <code>[13]byte</code>. Creating that view does not copy the buffer or write anything;
+    <code>Write</code> performs the I/O.</p>
+    <p>Notice the two counts: <code>copy</code> moves 12 values into the buffer;
+    <code>Write</code> must report 13 bytes written. Revisit
+    <a href="#concept-copy">destination-first copy</a> or
+    <a href="#concept-slices">slice bounds</a> without leaving this page.</p>
+    <p class="concept-links"><a href="#concept-report">Link to this note</a>
+    <a href="https://pkg.go.dev/os#File.Write">Go reference: File.Write</a></p>
+    </div>
+  </details>
 
   <div class="call gotcha"><span class="tag">Gotcha · eight hex digits, not four</span>
   <p><code>HID_ID=0003:00002022:00000522</code>: the vendor and product fields are zero-padded to
@@ -995,6 +1282,25 @@ func main() {
   <p>Before running it, trace a tick where the CPU read fails but the GPU reads 42.0.
   Which digit bytes should be blank? Should the device handle be closed?</p>
 
+  <details class="concept" id="concept-lifetimes">
+    <summary>Concept · What is reused, and what is fresh on each tick? <span class="concept-time">1 min</span></summary>
+    <div class="details-body">
+    <p>Outside the loop we keep sensor <em>paths</em> (strings), the open device handle, and the
+    ticker. Inside it we read fresh file bytes, parse fresh temperatures, and build a new
+    <code>[12]byte</code> packet value. Remembering a path does not cache the file's contents.</p>
+    <p>Each call to <code>buildPacket</code> starts with a zeroed local array; each
+    <code>send</code> starts with a zeroed report buffer. No old digit bytes carry into the
+    next update. Passing these arrays copies their values; slicing them creates views only
+    where the code explicitly uses <code>[:]</code>.</p>
+    <p><code>tick.C</code> is a channel of tick events, not a slice.
+    <code>for range tick.C</code> waits for one event per iteration. The
+    <a href="#concept-select">channel and select note in step 8</a> explains how to wait
+    for either a tick or cancellation.</p>
+    <p class="concept-links"><a href="#concept-lifetimes">Link to this note</a>
+    <a href="https://pkg.go.dev/time#NewTicker">Go reference: NewTicker</a></p>
+    </div>
+  </details>
+
   <div class="call reach"><span class="tag">Reach for</span>
   <p><code>time.NewTicker(time.Second)</code> rather than <code>time.Sleep</code> in a loop: a
   sleep after each update adds the work time to the interval. A ticker schedules regular ticks
@@ -1102,6 +1408,25 @@ func orNone(path string, ok bool) string {
   <p>Implement <code>display</code>, <code>ensureOpen</code>, <code>close</code>, and
   <code>send</code> against this table. Use <code>*display</code> receivers: these methods
   must update the stored object, not a copy of it. Its zero value is the closed state.</p>
+  <details class="concept" id="concept-receivers">
+    <summary>Concept · A pointer receiver updates the original state <span class="concept-time">2 min</span></summary>
+    <div class="details-body">
+    <p>A receiver <code>(d display)</code> would give the method a copy of the struct.
+    Assigning <code>d.f = nil</code> would only change that copy. A receiver
+    <code>(d *display)</code> receives a pointer to the original, so changing its fields
+    persists after the method returns. For a local <code>var d display</code>, Go lets
+    <code>d.close()</code> use <code>&amp;d</code> automatically.</p>
+    <p><strong>Copying a struct is not duplicating a device.</strong> The <code>f *os.File</code>
+    field points to a file object. Copying the struct would copy that pointer, leaving both
+    structs referring to the same file object. Closing it through either one affects that
+    same open handle. Keep one owner for this state instead of copying <code>display</code>.</p>
+    <p>Compare the three cases: array assignment copies elements; slice assignment copies a
+    view of shared elements; pointer assignment copies a reference to the same object.
+    None of those automatically creates another open device.</p>
+    <p class="concept-links"><a href="#concept-receivers">Link to this note</a>
+    <a href="https://go.dev/tour/methods/4">Go Tour: pointer receivers</a></p>
+    </div>
+  </details>
   <p>Then replace the main function's direct discovery/open/send code with
   <code>var d display</code> and <code>d.send(p)</code>. Keep <code>readOrBlank</code> and
   <code>orNone</code>. A device missing at startup now follows the same retry path as an unplug.</p>
@@ -1227,6 +1552,25 @@ func (d *display) send(p [12]byte) error {
   cancellation leaves the inner select; the next loop iteration sees <code>ctx.Done()</code>
   and runs the shutdown branch.</p>
 
+  <details class="concept" id="concept-select">
+    <summary>Concept · Channels wait for events; select waits for alternatives <span class="concept-time">2 min</span></summary>
+    <div class="details-body">
+    <p>A slice describes stored elements. A channel lets code send and receive events.
+    <code>&lt;-tick.C</code> waits to receive a tick; it is not indexing or removing a slice
+    element. <code>ctx.Done()</code> returns a channel that is <em>closed</em> on cancellation.
+    Receiving from a closed channel is immediately ready, even on subsequent receives.</p>
+    <p><code>select</code> waits until one of its channel operations can proceed, then runs
+    that case. With no <code>default</code>, it blocks rather than polling. If several cases
+    are ready, one is chosen pseudo-randomly; case order does not give cancellation priority.</p>
+    <p>The inner retry select waits for a timer or cancellation. Cancellation makes that wait
+    finish; it does not return from <code>main</code>. The outer loop then checks events again
+    and can run the shutdown case. It may handle a ready tick first—this code has no strict
+    cancellation priority. The explicit <code>return</code> in the shutdown case exits the function.</p>
+    <p class="concept-links"><a href="#concept-select">Link to this note</a>
+    <a href="https://go.dev/tour/concurrency/5">Go Tour: select</a></p>
+    </div>
+  </details>
+
   <div class="call reach"><span class="tag">Reach for</span>
   <p><code>signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)</code>,
   then <code>select</code> over <code>ctx.Done()</code> and your ticker channel.</p></div>
@@ -1332,6 +1676,21 @@ ldd antec-display     # "not a dynamic executable"</code></pre></div>
   binary. It still needs the kernel's sensor files and device node. Keep debug information
   while learning; <code>-ldflags="-s -w"</code> is an optional size reduction later.</p>
 
+  <details class="concept" id="concept-build">
+    <summary>Concept · Source files, binary, and service are different things <span class="concept-time">1 min</span></summary>
+    <div class="details-body">
+    <p><code>go build .</code> compiles the package's Go source into an executable binary.
+    It does not install or start the service. <code>go run .</code> compiles and runs a
+    temporary binary, which is convenient while learning.</p>
+    <p>The systemd unit starts the executable at <code>ExecStart</code>. Editing a Go file
+    does not change that installed binary or an already-running process. After a code change,
+    test, rebuild, install the updated binary, and restart the service. Use
+    <code>daemon-reload</code> when the unit definition changes, not merely because you rebuilt Go code.</p>
+    <p class="concept-links"><a href="#concept-build">Link to this note</a>
+    <a href="https://pkg.go.dev/cmd/go#hdr-Compile_packages_and_dependencies">Go reference: go build</a></p>
+    </div>
+  </details>
+
   <p>Reuse the repo's <a href="70-antec-display.rules">udev rule</a> and
   <a href="antec-display.service">systemd unit</a>; set <code>ExecStart</code> to your binary.
   <code>ProtectSystem=strict</code> makes the filesystem read-only except
@@ -1415,6 +1774,32 @@ sudo systemctl enable --now antec-display</code></pre></div>
     root.setAttribute('data-theme',next); store('antec-theme',next);
   });
 
+  /* ---- deep links into optional notes, including nested details ---- */
+  function revealHash(focus){
+    var id; try{ id=decodeURIComponent(location.hash.slice(1)); }catch(e){ return; }
+    if(!id) return;
+    var target=document.getElementById(id); if(!target) return;
+    var node=target;
+    while(node){
+      if(node.tagName==='DETAILS') node.open=true;
+      node=node.parentElement;
+    }
+    // Opening a disclosure changes layout: scroll only after all ancestors are open.
+    target.scrollIntoView({block:'start'});
+    if(focus && target.matches('details.concept')){
+      target.querySelector('summary').focus({preventScroll:true});
+    }
+  }
+  window.addEventListener('hashchange',function(){ revealHash(true); });
+  // Clicking the current hash again must reopen a note that was manually collapsed.
+  document.addEventListener('click',function(event){
+    var link=event.target.closest('a[href^="#"]');
+    if(link && link.hash===location.hash && !event.defaultPrevented && event.button===0 &&
+      !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey){
+      event.preventDefault(); revealHash(true);
+    }
+  });
+
   /* ---- syntax highlighting ---- */
   var KW = {
     go:"break case chan const continue default defer else fallthrough for func go goto if import interface map package range return select struct switch type var nil true false",
@@ -1490,6 +1875,10 @@ sudo systemctl enable --now antec-display</code></pre></div>
     });
   });
   sync();
+  // Wait for native fragment navigation before placing focus on a bookmarked note.
+  window.addEventListener('load',function(){
+    requestAnimationFrame(function(){ revealHash(true); });
+  });
 })();
 </script>
 </body>
