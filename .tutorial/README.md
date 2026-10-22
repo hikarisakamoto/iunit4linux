@@ -28,16 +28,28 @@ journalctl -u antec-display -f
 
 ## Build it yourself
 
-The repo also contains a three-part tutorial that reimplements the daemon from
-scratch. Open the HTML files in a browser:
+The repo also contains tutorials for reimplementing the daemon from scratch.
+Open the HTML files in a browser:
 
 | Page | What's in it |
 |------|--------------|
 | [`foundations.html`](foundations.html) | The hardware, the HID report descriptor decoded, the protocol, `hwmon`, permissions, and a debugging toolkit. Language-agnostic — read it first. |
+| [`go-v2.html`](go-v2.html) | Building blocks first: tests, paths, reading/opening files, listing/filtering folders, temporary fixtures, and bytes. Worked examples lead into completion tasks, independent problems, and later review—without a finished daemon to copy. Start here if you know Go syntax but the original guide moves too quickly. |
 | [`go.html`](go.html) | Nine incremental builds in Go, with optional, linkable concept notes for arrays, slices, `copy`, discovery lists, and later language features. |
 | [`rust.html`](rust.html) | The same nine steps in Rust, for someone who has never written it but knows some Go. |
 
-The Go steps start with small implementation tasks and concrete checks, with
+Go v2 uses a separate scratch module, predictable fake sensor files, and expected
+outputs so you can experiment without changing your project or accessing hardware.
+It builds up from one assertion to a plain table-test loop; subtests and other
+detours are optional. Predictions have collapsed feedback, and guidance decreases
+from worked examples to completion tasks and independent filesystem problems.
+Session stopping points and later recall/transfer tasks help you check what you
+can use without copying. Go 1.21+ is required; no `sudo` is needed. Follow it with
+the original Go guide when you are ready to build the service. The learning-design
+references and their limits are noted at the end of V2; runnable examples alone
+do not establish learning effectiveness.
+
+The original Go steps start with small implementation tasks and concrete checks, with
 collapsed hints before the reference code. Concept notes expand in place without
 interrupting the main tasks; the shortcuts near the top link directly to each note.
 Scratch examples stay separate from your implementation. Guidance decreases as the pieces come

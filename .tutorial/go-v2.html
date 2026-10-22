@@ -1,0 +1,1384 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Go v2 — Small building blocks for the Antec project</title>
+<style>
+:root{
+  color-scheme:light dark;
+  --bg:#F1F3F5;--surface:#FFFFFF;--sunken:#E7EAEE;--text:#171B21;--dim:#5A626E;
+  --line:#D2D7DE;--accent:#00728E;--ok:#2C7169;--warn:#A03C36;
+  --mono:ui-monospace,"SF Mono","JetBrains Mono","DejaVu Sans Mono",monospace;
+  --sans:system-ui,"Segoe UI",Roboto,"Noto Sans",sans-serif;
+}
+@media(prefers-color-scheme:dark){
+  :root{--bg:#0F1216;--surface:#161A20;--sunken:#0B0E12;--text:#E3E7EC;--dim:#A5AFBC;
+    --line:#343D49;--accent:#79D3F0;--ok:#70C4B8;--warn:#EE9B93}
+}
+*{box-sizing:border-box}
+html{scroll-padding-top:1.5rem}
+body{margin:0;background:var(--bg);color:var(--text);font:16.5px/1.7 var(--sans)}
+.wrap{max-width:1200px;margin:auto;padding:0 1.5rem 4rem}
+header{padding:3rem 0 2rem;border-bottom:1px solid var(--line)}
+.kicker,.label{font-family:var(--mono);font-size:.75rem;letter-spacing:.07em;color:var(--dim)}
+h1,h2,h3{font-family:var(--mono);line-height:1.3}
+h1{font-size:clamp(1.8rem,4vw,2.8rem);max-width:24ch;margin:.7rem 0}
+h2{font-size:1.4rem;margin:0 0 1rem}
+h3{font-size:1rem;margin:1.8rem 0 .6rem}
+.lede{font-size:1.12rem;color:var(--dim);max-width:65ch}
+nav{padding:1.5rem 0}nav ol{padding-left:1.5rem}nav li{margin:.3rem 0}
+nav a{text-decoration:none}nav p{font-size:.88rem}
+main{min-width:0}section{padding:2.6rem 0;border-bottom:1px solid var(--line)}
+p,ul,ol{max-width:72ch;margin-top:0}li{margin-bottom:.4rem}
+a{color:var(--accent);text-underline-offset:3px}
+a:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+code{font: .88em var(--mono);background:var(--sunken);padding:.1em .3em;border-radius:3px;overflow-wrap:anywhere}
+pre{background:var(--sunken);border:1px solid var(--line);border-radius:4px;
+  padding:1rem;overflow:auto;font: .83rem/1.65 var(--mono);margin:.4rem 0 1.4rem}
+pre code{font:inherit;background:none;padding:0;overflow-wrap:normal}
+.label{display:block;margin-top:1rem}
+.call{padding:1rem 1.2rem;background:var(--surface);border:1px solid var(--line);
+  border-left:3px solid var(--accent);border-radius:3px;margin:1.3rem 0}
+.call p:last-child,.call ul:last-child{margin-bottom:0}
+.check{border-left-color:var(--ok)}.gotcha{border-left-color:var(--warn)}
+.call strong:first-child{display:block;margin-bottom:.3rem}
+details{border:1px solid var(--line);border-radius:4px;background:var(--surface);margin:1rem 0}
+summary{padding:.8rem 1rem;cursor:pointer;color:var(--accent)}
+.answer{padding:0 1rem 1rem}.answer>:last-child{margin-bottom:0}
+.tablewrap{overflow:auto;margin:1rem 0}table{border-collapse:collapse;width:100%;background:var(--surface);font-size:.9rem}
+caption{text-align:left;font-weight:600;padding:.5rem 0}
+th,td{border:1px solid var(--line);padding:.6rem;text-align:left;vertical-align:top}
+footer{padding-top:2rem;color:var(--dim);font-size:.9rem}
+@media(min-width:1000px){
+  .wrap{display:grid;grid-template-columns:15rem minmax(0,1fr);column-gap:3rem}
+  header,footer{grid-column:1/-1}
+  nav{position:sticky;top:0;align-self:start;max-height:100vh;overflow:auto;font-size:.86rem}
+}
+@media print{nav{display:none}.wrap{display:block}pre{white-space:pre-wrap;overflow-wrap:anywhere}details{break-inside:avoid}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <a href="go.html">Original Go tutorial</a> · <a href="foundations.html">Hardware foundations</a>
+  <p class="kicker">ANTEC PANEL · GO TUTORIAL V2 · BUILDING BLOCKS FIRST</p>
+  <h1>I know the syntax. How do I build things?</h1>
+  <p class="lede">Small experiments with tests, files, folders, errors, and bytes. Learn what each
+  piece does, predict its result, then combine the pieces yourself. No finished daemon to copy,
+  no hardware required, and no <code>sudo</code>.</p>
+</header>
+<nav aria-label="Tutorial contents">
+  <strong>Your building blocks</strong>
+  <ol start="0">
+    <li><a href="#setup">A safe place to experiment</a></li>
+    <li><a href="#contracts">Think in inputs and outputs</a></li>
+    <li><a href="#one-test">Write one ordinary test</a></li>
+    <li><a href="#table-tests">Turn it into a table-driven test</a></li>
+    <li><a href="#paths">Understand paths and folders</a></li>
+    <li><a href="#parse">Turn text into a number</a></li>
+    <li><a href="#read">Read a small file</a></li>
+    <li><a href="#open">Open, read, and close</a></li>
+    <li><a href="#list">List a folder</a></li>
+    <li><a href="#filter">Filter and collect paths</a></li>
+    <li><a href="#file-tests">Test files with fake data</a></li>
+    <li><a href="#discovery">Combine the blocks: discovery</a></li>
+    <li><a href="#bytes">Arrays, slices, and output bytes</a></li>
+    <li><a href="#next">Use it without the guide</a></li>
+  </ol>
+  <p>Read in order the first time. Afterwards, use this as a recipe book.</p>
+</nav>
+<main>
+<section id="setup">
+  <h2>0 · A safe place to experiment</h2>
+  <p>You do not need another syntax course. The missing bridge is often knowing which standard-library
+  operation to reach for, what it returns, and how to check it. That is what we will practise.</p>
+  <p>Use a <strong>separate scratch module</strong>, not your current project. Your existing
+  <code>packet.go</code>, tests, and <code>sensors.go</code> can stay exactly as they are.</p>
+  <span class="label">Shell — create a new, empty directory; use another name if this already exists</span>
+<pre data-kind="shell"><code>mkdir -p ~/src/go-building-blocks-v2
+cd ~/src/go-building-blocks-v2
+go mod init example.com/go-building-blocks-v2</code></pre>
+  <p>Run all later commands from that directory. Run <code>go mod init</code> only once.
+   You need Go 1.21 or newer (<code>go version</code>); all examples use the standard library.</p>
+  <span class="label">main.go — create this file</span>
+<pre data-kind="file" data-file="main.go"><code>package main
+
+import "fmt"
+
+func main() {
+	fmt.Println("ready")
+}</code></pre>
+  <span class="label">Shell</span>
+<pre data-kind="shell"><code>go run .
+# ready</code></pre>
+  <div class="call">
+    <strong>How to read the examples</strong>
+    <ul>
+      <li><strong>File:</strong> complete Go source. Create the named file, or replace it when told.</li>
+      <li><strong>Fragment:</strong> only part of a file. Its label says where it belongs.</li>
+      <li><strong>Pseudocode:</strong> a plan in plain language. It is deliberately not compilable Go.</li>
+      <li><strong>Complete:</strong> fill the marked gaps. These blocks do not compile until you fill them.</li>
+      <li><strong>Build:</strong> work from the contract, with the example out of view. API documentation is allowed.</li>
+      <li><strong>Check:</strong> reveal feedback after an attempt. If stuck, use one hint, retry, then compare.</li>
+    </ul>
+  </div>
+  <p>Keep just one <code>func main()</code>. Different <code>.go</code> files in this folder share
+  <code>package main</code>, so functions can call one another. Imports belong to each individual file;
+  an import in <code>main.go</code> does not import it for <code>read.go</code>.</p>
+  <p><code>go run .</code> runs the package. <code>go test ./...</code> runs tests in this module.
+  Tests do not run your <code>main()</code>. Use <code>gofmt -w *.go</code> to format your scratch files.</p>
+  <div class="call check"><strong>What you are learning to do</strong>
+    <ul>
+      <li>Choose and combine operations for paths, files, and folders.</li>
+      <li>Write tests that distinguish success, invalid contents, and missing files.</li>
+      <li>Explain a result and solve a changed problem without copying the example.</li>
+    </ul>
+  </div>
+  <h3>A route, not a reading marathon</h3>
+  <ol>
+    <li><strong>Lessons 1–3:</strong> contracts and tests. Stop after the independent test task.</li>
+    <li><strong>Lessons 4–6:</strong> paths, parsing, and reading. Start with the recall prompt in lesson 4.</li>
+    <li><strong>Lessons 7–10:</strong> file handles, listing, and file tests. Start with lesson 7's recall prompt.</li>
+    <li><strong>Lessons 11–13:</strong> combine the pieces, then try a new task without this guide.</li>
+  </ol>
+  <p>Split a block further if needed. At a stopping point, note what you could do independently
+  and what needed a hint. Return in another session rather than immediately repeating everything.
+  The review plan in <a href="#review">lesson 13</a> helps you check what stayed with you.</p>
+  <p>For each skill: study one example → predict a change → complete a step → build something
+  related. Do not struggle indefinitely: reveal a hint, try again, and explain the correction.
+  The goal is choosing and reasoning about operations, not memorizing every API spelling.</p>
+  <details><summary>Keeping your scratch files manageable</summary><div class="answer">
+    <p>The lessons replace <code>main.go</code> as the demonstration changes, but keep the helper
+    and test files. Before replacing an experiment you want to revisit, save it as a text note
+    such as <code>main-read.txt</code>, not as another <code>.go</code> file with a second main.
+    After an exercise, restore the original helper's behavior so later lessons have the same starting point.</p>
+  </div></details>
+</section>
+
+<section id="contracts">
+  <h2>1 · Think in inputs and outputs</h2>
+  <p>Before implementing a function, describe its <strong>contract</strong>: what it receives,
+  what it promises to return, and what can fail.</p>
+  <span class="label">Pseudocode — not Go, not a finished implementation</span>
+<pre data-kind="pseudo"><code>read temperature(path):
+    read the file at path
+    if reading failed: return an error
+    remove surrounding whitespace
+    interpret the text as an integer
+    if interpreting failed: return an error
+    convert millidegrees to degrees
+    return the temperature</code></pre>
+  <p>Notice that there are two jobs here: <em>getting bytes</em> and <em>understanding bytes</em>.
+  We can learn and test them separately.</p>
+  <div class="tablewrap"><table>
+    <caption>Choose a small responsibility</caption>
+    <thead><tr><th>Block</th><th>Input</th><th>Output</th><th>Needs the outside world?</th></tr></thead>
+    <tbody>
+      <tr><td>Clamp an integer</td><td><code>120</code></td><td><code>99</code></td><td>No</td></tr>
+      <tr><td>Parse a temperature</td><td><code>"47125\n"</code></td><td><code>47.125</code> or an error</td><td>No</td></tr>
+      <tr><td>Read a temperature</td><td>A file path</td><td>A temperature or an error</td><td>Yes: filesystem</td></tr>
+      <tr><td>Find input paths</td><td>A folder path</td><td>A list of paths or an error</td><td>Yes: filesystem</td></tr>
+    </tbody>
+  </table></div>
+  <p>A function without file access, printing, or other outside effects is often called a
+  <strong>pure function</strong> when its result depends only on its arguments. These are a useful
+  place to start: the same input produces the same result, without setting up hardware.</p>
+  <div class="call check"><strong>Predict</strong>
+    <p>If parsing fails, should the caller receive a successful temperature of zero?
+    Write a reason before opening the check.</p>
+  </div>
+  <details><summary>Check — zero versus failure</summary><div class="answer">
+    <p>No. Zero is also a real temperature. A separate error result distinguishes a failed
+    parse from a measured zero. “No data” is not the same state as “data whose value is zero”.</p>
+  </div></details>
+</section>
+
+<section id="one-test">
+  <h2>2 · Write one ordinary test</h2>
+  <p>First use an intentionally simple rule: keep an integer within 0–99. This is a practice
+  function, not the panel's complete temperature encoder.</p>
+  <span class="label">bounds.go — create this file</span>
+<pre data-kind="file" data-file="bounds.go"><code>package main
+
+func clampDisplay(n int) int {
+	if n &lt; 0 {
+		return 0
+	}
+	if n &gt; 99 {
+		return 99
+	}
+	return n
+}</code></pre>
+  <span class="label">bounds_test.go — create this file</span>
+<pre data-kind="file" data-file="bounds_test.go"><code>package main
+
+import "testing"
+
+func TestClampDisplay(t *testing.T) {
+	got := clampDisplay(120)
+	want := 99
+	if got != want {
+		t.Errorf("clampDisplay(120) = %d, want %d", got, want)
+	}
+}</code></pre>
+  <ul>
+    <li><code>_test.go</code> tells Go that this file contains test code.</li>
+    <li><code>TestClampDisplay</code> starts with <code>Test</code> followed by an uppercase letter,
+    so the test runner discovers it.</li>
+    <li><code>t *testing.T</code> is the test runner's handle for reporting failures and other test actions.
+    You do not construct it or call this function yourself.</li>
+    <li><code>got</code> is the actual result. <code>want</code> is the independently chosen expected result.
+    These are conventions, not special Go keywords.</li>
+    <li><code>t.Errorf</code> records a failure. A passing test simply finishes without reporting one.</li>
+  </ul>
+  <span class="label">Shell — -v shows test names; -run selects a test</span>
+<pre data-kind="shell"><code>go test -run '^TestClampDisplay$' -v
+# === RUN   TestClampDisplay
+# --- PASS: TestClampDisplay (...)
+# PASS</code></pre>
+  <div class="call check"><strong>Break it on purpose</strong>
+    <p>Change <code>want</code> to 98. Run again. It should fail with
+    <code>clampDisplay(120) = 99, want 98</code>. Restore 99. You have checked both the
+    function and your ability to make the test detect a mismatch.</p>
+  </div>
+  <p><strong>Exercise:</strong> write down the expected results for -1, 0, 42, 99, and 100
+  before adding more tests. Which ones check boundaries?</p>
+</section>
+
+<section id="table-tests">
+  <h2>3 · Turn it into a table-driven test</h2>
+  <p>A table-driven test is not another test framework. It is just <strong>a list of examples
+  plus a loop that performs the same check for each example</strong>.</p>
+  <span class="label">Pseudocode — the whole pattern</span>
+<pre data-kind="pseudo"><code>examples = [
+    {name: "below minimum", input: -1, expected: 0},
+    {name: "inside range", input: 42, expected: 42},
+]
+
+for each example:
+    actual = clamp(example.input)
+    if actual differs from example.expected:
+        report which example failed, actual, and expected</code></pre>
+  <span class="label">bounds_test.go — replace the previous contents, do not add a duplicate test</span>
+<pre data-kind="file" data-file="bounds_test.go"><code>package main
+
+import "testing"
+
+func TestClampDisplay(t *testing.T) {
+	cases := []struct {
+		name string
+		in   int
+		want int
+	}{
+		{name: "below minimum", in: -1, want: 0},
+		{name: "at minimum", in: 0, want: 0},
+		{name: "inside range", in: 42, want: 42},
+		{name: "at maximum", in: 99, want: 99},
+		{name: "above maximum", in: 100, want: 99},
+	}
+
+	for _, tc := range cases {
+		got := clampDisplay(tc.in)
+		if got != tc.want {
+			t.Errorf("%s: clampDisplay(%d) = %d, want %d", tc.name, tc.in, got, tc.want)
+		}
+	}
+}</code></pre>
+  <h3>Read the brackets from the outside in</h3>
+  <ol>
+    <li><code>[]</code>: a slice, used here as a list of cases.</li>
+    <li><code>struct { ... }</code>: the type of each row, containing three named fields.
+    It has no type name because we only need it here.</li>
+    <li>The second <code>{ ... }</code>, after the struct's closing brace: the actual rows.</li>
+    <li><code>{name: "inside range", in: 42, want: 42}</code>: one row, with field names
+    so you do not need to remember positional ordering.</li>
+    <li><code>for _, tc := range cases</code>: discard each index; give the current row the name
+    <code>tc</code> (short for “test case”).</li>
+  </ol>
+  <p>The test still has the same arrange → call → compare structure. The loop changes the
+  data, not the assertion. Including <code>tc.name</code> tells you which row failed.</p>
+  <span class="label">Shell</span>
+<pre data-kind="shell"><code>go test -run '^TestClampDisplay$' -v</code></pre>
+  <p>This runs all five rows inside one test. You do not need subtests to make a table-driven test.</p>
+  <div class="call check"><strong>Change one thing</strong>
+    <p>Leave the expected results alone. Temporarily remove the <code>n &gt; 99</code> branch
+    in <code>clampDisplay</code>. Predict which row catches this bug, then run the test.
+    Restore the branch before continuing.</p>
+  </div>
+  <details><summary>Check — did the test catch the implementation bug?</summary><div class="answer">
+    <p>“above maximum” fails: the broken function returns 100 instead of 99. The other four
+    rows still match. A test is useful when a wrong implementation makes it fail, not merely
+    when the supplied correct implementation makes it pass.</p>
+  </div></details>
+  <h3>Complete — reconstruct the assertion</h3>
+  <p>Hide the example above. Replace only the loop in your test with this incomplete loop,
+  then fill both gaps. Use the existing <code>cases</code> table.</p>
+  <span class="label">Exercise fragment — inside TestClampDisplay; fill the gaps before running</span>
+<pre data-kind="exercise" data-id="clamp-loop"><code>for _, tc := range cases {
+	got := _____(tc.in)
+	if _____ {
+		t.Errorf("%s: got %d, want %d", tc.name, got, tc.want)
+	}
+}</code></pre>
+  <details><summary>Check — the two missing steps</summary><div class="answer">
+    <p>Call <code>clampDisplay</code>; compare <code>got != tc.want</code>. Explain why the
+    condition means “report a failure” rather than “report a success”. Then run the test.</p>
+  </div></details>
+  <h3>Choosing useful rows</h3>
+  <p>Try a normal value, each boundary, just outside each boundary, and any special “unavailable”
+  behavior. Do not calculate <code>want</code> by calling the function under test: that would compare
+  the function with itself.</p>
+  <p><strong>In your project:</strong> <code>TestDigits</code> uses the same pattern with a
+  <code>Reading</code> input and a <code>[3]byte</code> expected result. Arrays of comparable
+  elements support <code>==</code>; slices do not. We will compare path slices in lesson 10.</p>
+  <div class="call check" id="test-practice"><strong>Build — a new rule, without the example</strong>
+    <p>In <code>range.go</code>, write <code>isDisplayable(n int) bool</code>: true for integers
+    from 0 through 99 inclusive; false otherwise. Write <code>range_test.go</code> with a table
+    containing a normal value, both endpoints, and one value just outside each endpoint.</p>
+    <p>Use <code>go doc testing</code> if needed, but keep the tutorial code out of view.
+    Run the test and explain why each row exists. This practice helper is not part of the service.</p>
+  </div>
+  <details><summary>Hint — choosing the rows</summary><div class="answer">
+    <p>What should happen for -1, 0, 42, 99, and 100? Unlike clamping, this function
+    returns a yes/no decision; it does not modify the number.</p>
+  </div></details>
+  <details><summary>Check — acceptance criteria, not a solution to copy</summary><div class="answer">
+    <p>Expected results for -1, 0, 42, 99, 100 are false, true, true, true, false.
+    Temporarily make the function return true for every input. Your tests must fail on
+    the out-of-range cases. Restore it. If either endpoint fails, inspect inclusive versus
+    exclusive comparisons. Record whether you needed a hint, then stop here for this session.</p>
+  </div></details>
+  <details><summary>Optional — named subtests with t.Run</summary><div class="answer">
+    <p>Only after the plain loop makes sense, you can replace it with this loop.
+    <code>t.Run</code> runs the function you pass as a named subtest. It supplies that subtest's
+    <code>t</code>; you still use the same input and assertion.</p>
+    <span class="label">Fragment — replaces the loop inside TestClampDisplay, not the whole file</span>
+<pre data-kind="fragment" data-id="subtests"><code>for _, tc := range cases {
+	t.Run(tc.name, func(t *testing.T) {
+		got := clampDisplay(tc.in)
+		if got != tc.want {
+			t.Errorf("got %d, want %d", got, tc.want)
+		}
+	})
+}</code></pre>
+    <p>You can now run just one row with
+    <code>go test -run '^TestClampDisplay$/above_maximum$' -v</code>.
+    Go displays spaces in subtest names as underscores. Later examples do not require this option.</p>
+  </div></details>
+</section>
+
+<section id="paths">
+  <h2>4 · Understand paths and folders</h2>
+  <div class="call check"><strong>Recall — before reopening the previous lesson</strong>
+    <p>From memory, describe the three things each test row needs and the job of the loop.
+    If this is a new session, recreate one assertion in <code>range_test.go</code> before looking back.</p>
+  </div>
+  <details><summary>Check your recall</summary><div class="answer">
+    <p>A name, an input, and an independently chosen expected result. The loop calls the
+    function for each input and reports mismatches. Review only the step you could not reconstruct.</p>
+  </div></details>
+  <p>A folder is called a <strong>directory</strong> in Go's API. A path is a string describing
+  where to find something; it is not the contents, and constructing a path does not create a file.</p>
+  <ul>
+    <li><code>/sys/class/hwmon</code>: an absolute path, starting at the filesystem root.</li>
+    <li><code>fixtures/hwmon0/name</code>: a relative path, starting at the process's current working directory.</li>
+    <li><code>.</code>: the current directory. <code>..</code>: its parent.</li>
+    <li><code>~/src</code>: shell shorthand. <code>os.ReadFile("~/src/file")</code> does
+    <em>not</em> expand <code>~</code>. Use <code>os.UserHomeDir</code> and <code>filepath.Join</code> if needed.</li>
+  </ul>
+  <p>Create ordinary files that resemble a tiny <code>hwmon</code> tree. This known, repeatable
+  input is called a <strong>fixture</strong>. It is not connected to any sensor.</p>
+  <span class="label">Shell — from your scratch module</span>
+<pre data-kind="shell" data-fixture="true"><code>mkdir -p fixtures/hwmon0 fixtures/hwmon1
+printf 'k10temp\n' &gt; fixtures/hwmon0/name
+printf '47125\n' &gt; fixtures/hwmon0/temp1_input
+printf 'Tctl\n' &gt; fixtures/hwmon0/temp1_label
+printf '52000\n' &gt; fixtures/hwmon0/temp3_input
+printf 'amdgpu\n' &gt; fixtures/hwmon1/name
+printf '42000\n' &gt; fixtures/hwmon1/temp1_input</code></pre>
+  <span class="label">Expected tree — temp2 is deliberately absent</span>
+<pre data-kind="output"><code>fixtures/
+├── hwmon0/
+│   ├── name             (k10temp)
+│   ├── temp1_input      (47125)
+│   ├── temp1_label      (Tctl)
+│   └── temp3_input      (52000)
+└── hwmon1/
+    ├── name             (amdgpu)
+    └── temp1_input      (42000)</code></pre>
+  <span class="label">main.go — replace</span>
+<pre data-kind="file" data-file="main.go"><code>package main
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+)
+
+func main() {
+	cwd, err := os.Getwd()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	path := filepath.Join("fixtures", "hwmon0", "temp1_input")
+	fmt.Println("working directory:", cwd)
+	fmt.Println("path:", path)
+	fmt.Println("filename:", filepath.Base(path))
+}</code></pre>
+  <p><code>go run .</code> prints your scratch directory, then
+  <code>path: fixtures/hwmon0/temp1_input</code> and <code>filename: temp1_input</code> on Linux.</p>
+  <div class="call check"><strong>Predict</strong>
+    <p>If you launch an executable from a different directory, what happens to a relative fixture path?
+    Does it start from the directory containing your source code, or somewhere else?</p>
+  </div>
+  <details><summary>Check — where relative paths start</summary><div class="answer">
+    <p>They start from the process's working directory, so launching from a different directory
+    can point the same relative path somewhere else. A source file's location is not automatically the base.</p>
+  </div></details>
+</section>
+
+<section id="parse">
+  <h2>5 · Turn text into a number</h2>
+  <p>Before touching files, make a function that understands temperature <em>text</em>.</p>
+  <span class="label">Data trace — each arrow is a separate operation</span>
+<pre data-kind="output"><code>"47125\n"  string with a trailing newline
+    ↓ strings.TrimSpace
+"47125"    string without surrounding whitespace
+    ↓ strconv.Atoi
+47125      int, in millidegrees Celsius
+    ↓ float64(milli) / 1000
+47.125     float64, in degrees Celsius</code></pre>
+  <span class="label">parse.go — create</span>
+<pre data-kind="file" data-file="parse.go"><code>package main
+
+import (
+	"fmt"
+	"strconv"
+	"strings"
+)
+
+func parseMilliTemp(text string) (float64, error) {
+	clean := strings.TrimSpace(text)
+	milli, err := strconv.Atoi(clean)
+	if err != nil {
+		return 0, fmt.Errorf("parse temperature %q: %w", clean, err)
+	}
+	return float64(milli) / 1000, nil
+}</code></pre>
+  <h3>The error result is part of the contract</h3>
+  <p><code>(float64, error)</code> means the caller receives two results. A nil error means
+  success. On failure, our convention is “return zero and an error”; the caller must check
+  the error before using that zero.</p>
+  <p><code>fmt.Errorf</code> creates an error with a message. <code>%q</code> quotes text so
+  whitespace is visible; <code>%w</code> wraps another error, preserving it for inspection.
+  Returning an error lets the caller decide whether to print, retry, or stop.</p>
+  <div class="call gotcha"><strong>Convert before dividing</strong>
+    <p><code>47125 / 1000</code> using integers gives 47. Converting that answer to a float
+    still gives 47. Use <code>float64(milli) / 1000</code> to preserve the fraction.</p>
+  </div>
+  <span class="label">parse_test.go — create; table-driven testing with errors</span>
+<pre data-kind="file" data-file="parse_test.go"><code>package main
+
+import "testing"
+
+func TestParseMilliTemp(t *testing.T) {
+	cases := []struct {
+		name    string
+		text    string
+		want    float64
+		wantErr bool
+	}{
+		{name: "newline", text: "47125\n", want: 47.125},
+		{name: "whitespace", text: " 42000\n", want: 42},
+		{name: "zero is valid", text: "0\n", want: 0},
+		{name: "negative", text: "-5000\n", want: -5},
+		{name: "not a number", text: "Tctl\n", wantErr: true},
+		{name: "empty", text: "", wantErr: true},
+	}
+	for _, tc := range cases {
+		got, err := parseMilliTemp(tc.text)
+		if tc.wantErr {
+			if err == nil {
+				t.Errorf("%s: expected an error, got nil", tc.name)
+			}
+			continue // expected failure: there is no temperature to check
+		}
+		if err != nil {
+			t.Errorf("%s: unexpected error: %v", tc.name, err)
+			continue // do not use an invalid result
+		}
+		if got != tc.want {
+			t.Errorf("%s: got %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}</code></pre>
+  <p>Omitted struct fields have zero values: <code>wantErr</code> defaults to false.
+  First check an expected error. Otherwise reject an unexpected error before comparing the number.
+  <code>continue</code> moves to the next row; it does not stop the whole test.</p>
+  <details><summary>Optional — why these float comparisons work</summary><div class="answer">
+    <p>The successful values here are exactly representable as binary floating-point numbers,
+    so direct comparison is fine. For more general floating-point calculations, compare within
+    a tolerance chosen for the calculation, not an arbitrary constant copied from this example.</p>
+  </div></details>
+  <div class="call check"><strong>Try it</strong>
+    <p>Run <code>go test -run '^TestParseMilliTemp$' -v</code>. Temporarily change
+    <code>clean := strings.TrimSpace(text)</code> to <code>clean := text</code> and remove the
+    now-unused <code>strings</code> import. Predict which rows fail, run again, then restore both.
+    Explain why a successful zero must reach the number comparison.</p>
+  </div>
+  <details><summary>Check — newline handling and error branches</summary><div class="answer">
+    <p>Without trimming, newline, whitespace, zero, and negative rows fail: their strings
+    still contain whitespace that <code>Atoi</code> rejects. The two expected-error rows
+    still pass. A zero with no error is a valid result, not a reason to skip the assertion.
+    Parsing and display clamping are separate: this parser deliberately returns -5, not zero.</p>
+  </div></details>
+</section>
+
+<section id="read">
+  <h2>6 · Read a small file</h2>
+  <p><code>os.ReadFile(path)</code> opens the file, reads its contents, and closes it for you.
+  It returns <code>([]byte, error)</code>. For tiny sensor files, this is usually all you need.</p>
+  <span class="label">main.go — replace; inspect the bytes before interpreting them</span>
+<pre data-kind="file" data-file="main.go"><code>package main
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+)
+
+func main() {
+	path := filepath.Join("fixtures", "hwmon0", "temp1_input")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	fmt.Printf("bytes: %v\n", data)
+	fmt.Printf("text: %q\n", string(data))
+	celsius, err := parseMilliTemp(string(data))
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	fmt.Printf("temperature: %.3f °C\n", celsius)
+}</code></pre>
+  <span class="label">Expected output from go run .</span>
+<pre data-kind="output"><code>bytes: [52 55 49 50 53 10]
+text: "47125\n"
+temperature: 47.125 °C</code></pre>
+  <p>The byte 52 encodes the character <code>'4'</code>, not the digit value 4.
+  <code>string(data)</code> interprets those bytes as string content; it does not parse a number.
+  The byte 10 is the newline.</p>
+  <h3>Give the combined operation a name</h3>
+  <p>You have seen the complete read → convert → parse sequence in <code>main</code>.
+  Now extract it into a helper. A helper returns errors instead of printing them or terminating
+  the program. <code>main</code> decides what to do.</p>
+  <p><strong>Complete:</strong> create <code>read.go</code> from this skeleton. Fill the three
+  gaps without looking back at <code>main</code>. You may check API signatures with <code>go doc</code>.</p>
+  <span class="label">Exercise — read.go; fill the gaps before running go test ./...</span>
+<pre data-kind="exercise" data-id="read-temperature"><code>package main
+
+import (
+	"fmt"
+	"os"
+)
+
+func readTemperature(path string) (float64, error) {
+	data, err := _____(path)
+	if err != nil {
+		return 0, fmt.Errorf("read temperature: %w", err)
+	}
+	celsius, err := _____(_____)
+	if err != nil {
+		return 0, fmt.Errorf("parse %s: %w", path, err)
+	}
+	return celsius, nil
+}</code></pre>
+  <details><summary>Hint — trace the types</summary><div class="answer">
+    <p>The first call takes a path and returns bytes. The second takes text and returns
+    a number. What conversion bridges <code>[]byte</code> and <code>string</code>?</p>
+  </div></details>
+  <details><summary>Check — completed read.go; compare after your attempt</summary><div class="answer">
+  <span class="label">read.go — complete file; replace your skeleton, do not add another definition</span>
+<pre data-kind="file" data-file="read.go"><code>package main
+
+import (
+	"fmt"
+	"os"
+)
+
+func readTemperature(path string) (float64, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return 0, fmt.Errorf("read temperature: %w", err)
+	}
+	celsius, err := parseMilliTemp(string(data))
+	if err != nil {
+		return 0, fmt.Errorf("parse %s: %w", path, err)
+	}
+	return celsius, nil
+}</code></pre>
+    <p>The gaps are <code>os.ReadFile</code>, <code>parseMilliTemp</code>, and
+    <code>string(data)</code>. If yours differs, compare the types at each arrow before replacing it.</p>
+  </div></details>
+  <p><code>os.ReadFile</code>'s error already contains the path. The parser's error does not,
+  so we add it. Keep the error close to the operation that failed.</p>
+  <div class="call check"><strong>Exercise</strong>
+    <p>Change <code>main</code> to call <code>readTemperature(path)</code> and print only the
+    Celsius value. Then change the path to <code>name</code>, and afterwards to
+    <code>missing_input</code>. Before each run, predict which operation will fail.
+    Both failures should name the path rather than silently showing 0 °C.</p>
+  </div>
+  <details><summary>Hint — replacing the read-and-parse portion of main</summary><div class="answer">
+    <p>Keep the path construction. Replace the code after it with
+    <code>celsius, err := readTemperature(path)</code>, an <code>if err != nil</code> branch,
+    and your final <code>Printf</code>. You no longer need the <code>data</code> variable.</p>
+  </div></details>
+  <details><summary>Check — two different failures</summary><div class="answer">
+    <p><code>name</code> can be read, but <code>k10temp</code> is not an integer: parsing fails.
+    <code>missing_input</code> cannot be read at all. If you see a successful zero for either,
+    check that <code>main</code> handles the error before printing the number.</p>
+  </div></details>
+  <div class="call check" id="read-practice"><strong>Build — read a driver name, not a temperature</strong>
+    <p>Hide the examples. In <code>driver.go</code>, write
+    <code>readDriverName(path string) (string, error)</code>. Return the file's text without
+    surrounding whitespace. Reading failures must return an error. Empty contents are allowed:
+    return an empty string with no error. Do not parse a number, print, or exit inside the helper.</p>
+    <p>Check it from <code>main</code>: <code>fixtures/hwmon0/name</code> must produce
+    <code>"k10temp"</code>; a missing path must produce an error. We'll automate file tests in
+    lesson 10. Keep this helper: discovery can reuse it.</p>
+  </div>
+  <details><summary>Hint — one operation changes</summary><div class="answer">
+    <p>Reading still returns bytes. After conversion to a string, trim whitespace rather
+    than calling the numeric parser. Keep the read-error branch.</p>
+  </div></details>
+  <details><summary>Check — explain your choices before stopping</summary><div class="answer">
+    <p>Use <code>%q</code> when printing the result: <code>"k10temp\n"</code> means you forgot
+    to trim. A parse error means you reused the numeric parser unnecessarily. An error on a
+    missing path is correct; an empty string with no error would conceal the read failure.</p>
+    <p>Explain why <code>readDriverName</code> and <code>readTemperature</code> share the first
+    operation but not the last. Note any hint you used. This is a good session stopping point.</p>
+  </div></details>
+</section>
+
+<section id="open">
+  <h2>7 · What “open a file” actually means</h2>
+  <div class="call check"><strong>Recall — start without the previous code</strong>
+    <p>Sketch the steps for reading a temperature from a path. Where can it fail? Where must
+    bytes become text? If returning in a new session, reconstruct the body of
+    <code>readDriverName</code> before comparing it with your saved version.</p>
+  </div>
+  <details><summary>Check your recall</summary><div class="answer">
+    <p>Read bytes and check the read error; convert to text; parse and check the parse error;
+    return the temperature. A driver name instead needs conversion and trimming, without numeric parsing.</p>
+  </div></details>
+  <p>Reading a path and opening it are related, but not identical. <code>os.Open</code> returns
+  an <code>*os.File</code>: a handle to an open file. It does not return the file's contents.
+  You read through the handle, then close it.</p>
+  <span class="label">open.go — create; an alternative for learning, not a replacement for read.go</span>
+<pre data-kind="file" data-file="open.go"><code>package main
+
+import (
+	"io"
+	"os"
+)
+
+func readViaOpen(path string) ([]byte, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	data, err := io.ReadAll(f)
+	if err != nil {
+		return nil, err
+	}
+	return data, nil
+}</code></pre>
+  <ul>
+    <li><code>os.Open</code> opens for reading. If it fails, do not use <code>f</code>.</li>
+    <li><code>defer f.Close()</code> schedules cleanup for when this function returns, including an error return.</li>
+    <li><code>io.ReadAll</code> reads from the handle until the end. It returns bytes, like <code>ReadFile</code>.</li>
+    <li>The handle owns an operating-system resource. Closing releases it; this does not delete the file.</li>
+  </ul>
+  <p>Ignoring the close error here is acceptable for this small read-only example. For writes,
+  close can report a failure and should be checked. Also, <code>io.ReadAll</code> is not a good
+  default for huge or unbounded input: it keeps everything in memory.</p>
+  <details><summary>Before opening files in a loop — when defer actually runs</summary><div class="answer">
+    <p>If you open thousands of files in a loop and defer each close in the outer function,
+    they stay open until that function returns. Use a helper that opens, reads, and closes one
+    file per call, or use <code>os.ReadFile</code> for these small inputs.</p>
+  </div></details>
+  <div class="call check"><strong>Exercise</strong>
+    <p>In a small main, call <code>readViaOpen</code> for the fixture input and print the result
+    with <code>%q</code>. Expect <code>"47125\n"</code>. Compare with <code>os.ReadFile</code>.
+    The convenience function saves resource-management code, not a different conversion step.</p>
+  </div>
+</section>
+
+<section id="list">
+  <h2>8 · List a folder</h2>
+  <p><code>os.ReadDir(dir)</code> returns entries immediately inside a directory, sorted by
+  filename. It does not recursively explore subdirectories or read each file's contents.</p>
+  <span class="label">main.go — replace</span>
+<pre data-kind="file" data-file="main.go"><code>package main
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+)
+
+func main() {
+	root := "fixtures"
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	for _, entry := range entries {
+		path := filepath.Join(root, entry.Name())
+		fmt.Printf("name=%s directory=%t path=%s\n",
+			entry.Name(), entry.IsDir(), path)
+	}
+}</code></pre>
+  <span class="label">Expected output</span>
+<pre data-kind="output"><code>name=hwmon0 directory=true path=fixtures/hwmon0
+name=hwmon1 directory=true path=fixtures/hwmon1</code></pre>
+  <p><code>entry.Name()</code> is just <code>hwmon0</code>, not its full path.
+  <code>filepath.Join(root, entry.Name())</code> constructs the path you can pass to another
+  operation. The entry describes the file; the path tells you where it is.</p>
+  <div class="call check"><strong>Change one thing</strong>
+    <p>Set <code>root := filepath.Join("fixtures", "hwmon0")</code>. Predict the names,
+    count, and <code>directory</code> values before running. What changed about what you are listing?</p>
+  </div>
+  <details><summary>Check — one level deeper</summary><div class="answer">
+    <p>The four names are <code>name</code>, <code>temp1_input</code>, <code>temp1_label</code>,
+    <code>temp3_input</code>, all with <code>directory=false</code>. You are now listing files
+    inside a sensor directory rather than listing the sensor directories.</p>
+  </div></details>
+  <div class="call gotcha"><strong>Before using real sysfs</strong>
+    <p><code>/sys/class/hwmon</code> normally contains symbolic links. Do not reject entries
+    just because <code>entry.IsDir()</code> is false: it does not follow these links.
+    The fixture folders above are ordinary directories. You do not need the extra mechanics yet.</p>
+  </div>
+  <details><summary>Real-filesystem detail — following symbolic links</summary><div class="answer">
+  <p>A symbolic link is an entry pointing to another path. Entries under
+  <code>/sys/class/hwmon</code> are normally symlinks to directories elsewhere in sysfs.
+  <code>DirEntry.IsDir()</code> describes the entry itself and does not follow symlinks, so it
+  returns false for these links even though you can read files through them.</p>
+  <span class="label">Fragment — inside a directory loop; os.Stat follows a symlink</span>
+<pre data-kind="fragment" data-id="symlink-stat"><code>info, err := os.Stat(path)
+if err != nil {
+	continue // this example chooses to skip entries it cannot inspect
+}
+if info.IsDir() {
+	fmt.Println("directory or link to a directory:", path)
+}</code></pre>
+  <p>Use <code>os.Lstat</code> when you want information about the link itself instead.
+  For discovery, another option is to try reading <code>filepath.Join(path, "name")</code>
+  and handle the error, without filtering with <code>entry.IsDir()</code>.</p>
+  </div></details>
+</section>
+
+<section id="filter">
+  <h2>9 · Filter entries and collect paths</h2>
+  <p>Listing, selecting, and collecting are different steps. Start with all entries, keep only
+  the names you want, and build a result slice.</p>
+  <span class="label">Pseudocode</span>
+<pre data-kind="pseudo"><code>results = empty list
+for each entry in the folder:
+    if it is a directory: skip it
+    if its name does not begin with "temp": skip it
+    if its name does not end with "_input": skip it
+    add its full path to results
+return results</code></pre>
+  <p><strong>Complete:</strong> turn that plan into <code>list.go</code>. Use the skeleton
+  below to practise the selection and collection steps; the reading and error handling are supplied.</p>
+  <span class="label">Exercise — list.go; fill three gaps, then run go test ./...</span>
+<pre data-kind="exercise" data-id="list-inputs"><code>package main
+
+import (
+	"os"
+	"path/filepath"
+	"strings"
+)
+
+func listTempInputs(dir string) ([]string, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+	var paths []string
+	for _, entry := range entries {
+		name := entry.Name()
+		if entry.IsDir() {
+			continue
+		}
+		if !strings.HasPrefix(name, _____) || !strings.HasSuffix(name, _____) {
+			continue
+		}
+		paths = append(paths, _____)
+	}
+	return paths, nil
+}</code></pre>
+  <details><summary>Hint — name versus path</summary><div class="answer">
+    <p>Check the entry's name against the prefix and suffix in the plan. Collect a full path,
+    not just a basename, so a caller can read it without changing working directory.</p>
+  </div></details>
+  <details><summary>Check — completed list.go, after your attempt</summary><div class="answer">
+  <span class="label">list.go — complete file; replaces the skeleton</span>
+<pre data-kind="file" data-file="list.go"><code>package main
+
+import (
+	"os"
+	"path/filepath"
+	"strings"
+)
+
+func listTempInputs(dir string) ([]string, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+	var paths []string
+	for _, entry := range entries {
+		name := entry.Name()
+		if entry.IsDir() {
+			continue
+		}
+		if !strings.HasPrefix(name, "temp") || !strings.HasSuffix(name, "_input") {
+			continue
+		}
+		paths = append(paths, filepath.Join(dir, name))
+	}
+	return paths, nil
+}</code></pre>
+    <p>The missing values are <code>"temp"</code>, <code>"_input"</code>, and
+    <code>filepath.Join(dir, name)</code>. If you collected basenames, try reading one from
+    your scratch directory: why is the parent directory necessary?</p>
+  </div></details>
+  <p><code>continue</code> skips the rest of this iteration and moves to the next entry.
+  <code>return</code> exits the entire function. <code>append</code> returns an updated slice,
+  so keep the result: <code>paths = append(paths, path)</code>.</p>
+  <p><code>var paths []string</code> starts with length zero. You can range over or append to
+  this nil slice. Do not start with <code>make([]string, 3)</code> unless you want three actual
+  empty-string elements. Capacity is optional space for growth; length is the number of current elements.</p>
+  <p>For this lesson, “starts with temp and ends with _input” is the whole filename rule.
+  It also accepts <code>temperature_input</code>. Validating a numeric middle part is a separate
+  exercise; this helper is not claiming to validate every possible filename.</p>
+  <div class="call check"><strong>Exercise</strong>
+    <p>Replace the listing portion of <code>main</code> with a call to
+    <code>listTempInputs(filepath.Join("fixtures", "hwmon0"))</code>, check its error, then
+    print each returned path. Expect <code>temp1_input</code> and <code>temp3_input</code> only.
+    Do not invent a <code>temp2_input</code> just because there are two matches.</p>
+  </div>
+  <details><summary>Optional — a shorter alternative with a different error contract</summary><div class="answer">
+  <span class="label">Fragment — inside main; needs fmt, os, and path/filepath imports</span>
+<pre data-kind="fragment" data-id="glob"><code>matches, err := filepath.Glob(filepath.Join("fixtures", "hwmon0", "temp*_input"))
+if err != nil {
+	fmt.Fprintln(os.Stderr, err)
+	return
+}
+fmt.Println(matches)</code></pre>
+  <p><code>Glob</code> expands a pattern into matching paths. <code>*</code> matches zero or
+  more non-separator characters. Results are sorted lexically, not numerically:
+  <code>temp10_input</code> comes before <code>temp2_input</code>. A matching directory name
+  can be returned too; this is name matching, not proof of a readable sensor file.</p>
+  <div class="call gotcha"><strong>ReadDir and Glob have different error contracts</strong>
+    <p><code>ReadDir</code> reports failures such as a missing or unreadable directory.
+    <code>Glob</code> reports malformed patterns, but ignores filesystem I/O errors. An empty
+    Glob result does not distinguish “no matches” from “could not read the folder”.</p>
+  </div>
+  </div></details>
+</section>
+
+<section id="file-tests">
+  <h2>10 · Test file operations without real sensors</h2>
+  <p>A <strong>fixture</strong> is just controlled test data. <code>t.TempDir()</code> gives
+  each test a fresh temporary directory and removes it afterwards. No global test folder,
+  hardcoded sensor number, root privileges, or mocking framework is needed.</p>
+  <span class="label">Pseudocode — arrange, act, assert</span>
+<pre data-kind="pseudo"><code>arrange: make a temporary folder and write known contents
+act:     call the function with that folder or file path
+assert:  compare the result with the expected result</code></pre>
+  <span class="label">read_test.go — create; first, one ordinary test with a file</span>
+<pre data-kind="file" data-file="read_test.go"><code>package main
+
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
+
+func TestReadTemperature(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "temp1_input")
+	if err := os.WriteFile(path, []byte("47125\n"), 0600); err != nil {
+		t.Fatalf("create fixture: %v", err)
+	}
+
+	got, err := readTemperature(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != 47.125 {
+		t.Errorf("got %v, want 47.125", got)
+	}
+}</code></pre>
+  <p><code>os.WriteFile</code> creates or truncates a regular file and writes bytes into it.
+  <code>[]byte("47125\n")</code> converts a string to bytes. <code>0600</code> is an octal
+  permission mode requesting owner read/write access for a newly created file; it is not part of the contents.</p>
+  <p><code>t.Fatal</code> and <code>t.Fatalf</code> record a failure and stop the current test.
+  Setup errors must stop it: otherwise, a misleading read failure could look like the behavior
+  you intended to test.</p>
+  <div class="call check"><strong>Build — test the failure distinctions</strong>
+    <p>Using that pattern, add tests for valid zero, invalid contents, and a missing file.
+    Choose ordinary tests or a table. Keep the example out of view while you write them.
+    Also test your <code>readDriverName</code> helper with whitespace, empty contents, and a missing path.</p>
+    <p>Acceptance: zero and an empty driver name succeed; invalid temperature text and missing
+    files fail. None of these tests may depend on the <code>fixtures</code> folder or real sensors.</p>
+  </div>
+  <details><summary>Hint — creating a missing-file test</summary><div class="answer">
+    <p>Make a temporary directory and join a filename onto it, but do not write that file.
+    For invalid contents, create the file normally and put non-numeric text inside it.
+    Never continue to compare a temperature after an unexpected error.</p>
+  </div></details>
+  <details><summary>Check — one possible read_test.go table, after writing your tests</summary><div class="answer">
+    <p>Compare behavior, not exact spelling. This version replaces the ordinary test above;
+    do not keep two functions named <code>TestReadTemperature</code>. Your driver-name tests stay separate.</p>
+  <span class="label">read_test.go — optional replacement; a fresh fixture for every row</span>
+<pre data-kind="file" data-file="read_test.go"><code>package main
+
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
+
+func TestReadTemperature(t *testing.T) {
+	cases := []struct {
+		name    string
+		text    string
+		missing bool
+		want    float64
+		wantErr bool
+	}{
+		{name: "valid", text: "47125\n", want: 47.125},
+		{name: "zero", text: "0\n", want: 0},
+		{name: "invalid contents", text: "oops\n", wantErr: true},
+		{name: "missing file", missing: true, wantErr: true},
+	}
+	for _, tc := range cases {
+		path := filepath.Join(t.TempDir(), "temp1_input")
+		if !tc.missing {
+			if err := os.WriteFile(path, []byte(tc.text), 0600); err != nil {
+				t.Fatalf("%s: create fixture: %v", tc.name, err)
+			}
+		}
+
+		got, err := readTemperature(path)
+		if tc.wantErr {
+			if err == nil {
+				t.Errorf("%s: expected an error, got nil", tc.name)
+			}
+			continue
+		}
+		if err != nil {
+			t.Errorf("%s: unexpected error: %v", tc.name, err)
+			continue
+		}
+		if got != tc.want {
+			t.Errorf("%s: got %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}</code></pre>
+  </div></details>
+  <span class="label">list_test.go — create; compare slices using slices.Equal</span>
+<pre data-kind="file" data-file="list_test.go"><code>package main
+
+import (
+	"os"
+	"path/filepath"
+	"slices"
+	"testing"
+)
+
+func TestListTempInputs(t *testing.T) {
+	dir := t.TempDir()
+	for _, name := range []string{"name", "temp1_input", "temp1_label", "temp3_input"} {
+		path := filepath.Join(dir, name)
+		if err := os.WriteFile(path, []byte("fixture\n"), 0600); err != nil {
+			t.Fatalf("create fixture: %v", err)
+		}
+	}
+	// A directory with a matching name should be skipped by this helper.
+	if err := os.Mkdir(filepath.Join(dir, "temp9_input"), 0700); err != nil {
+		t.Fatalf("create directory fixture: %v", err)
+	}
+
+	got, err := listTempInputs(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{
+		filepath.Join(dir, "temp1_input"),
+		filepath.Join(dir, "temp3_input"),
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}</code></pre>
+  <p><code>slices.Equal</code> compares lengths and corresponding elements (standard library,
+  Go 1.21+). You cannot use <code>got == want</code> for two slices. This test also checks order,
+  which is predictable because our helper preserves <code>ReadDir</code>'s filename sorting.</p>
+  <div class="call check"><strong>Try it, then extend it</strong>
+    <p>Run <code>go test ./... -v</code>. Add a test for an empty directory: expect no error and
+    <code>len(got) == 0</code>. Add a test for a missing directory: expect an error.
+    These are different outcomes, not the same “nothing found”.</p>
+  </div>
+  <details><summary>Check — can the tests reject a wrong implementation?</summary><div class="answer">
+    <p>Temporarily add <code>if path != "" { return 0, nil }</code> at the start of
+    <code>readTemperature</code>, keeping the remaining code and imports. This deliberately
+    wrong shortcut returns a successful zero for every nonempty path. The valid nonzero,
+    invalid-contents, and missing-file tests must fail. The valid-zero test alone cannot catch
+    this bug. Remove the shortcut afterwards.</p>
+    <p>An empty-directory test checks <code>err == nil</code> and <code>len(got) == 0</code>;
+    a missing-directory test checks <code>err != nil</code>. If both pass when the helper always
+    returns an empty successful result, your missing-directory assertion is absent or wrong.</p>
+    <p>Before stopping this session, explain which mistakes each test can catch. Record whether
+    you wrote the tests independently, with a hint, or after opening the reference.</p>
+  </div></details>
+  <details><summary>Next step — inspect an error without matching its message</summary><div class="answer">
+    <p>For the missing-file case, import <code>errors</code> and <code>io/fs</code>, then use
+    <code>errors.Is(err, fs.ErrNotExist)</code>. It works through <code>%w</code> wrapping.
+    Comparing an entire error string is brittle because paths and system messages can vary.</p>
+    <p>Do not test permissions by merely assuming mode <code>0000</code> must fail: a test
+    running as root may still read the file. The missing-file case is a simpler first failure test.</p>
+  </div></details>
+</section>
+
+<section id="discovery">
+  <h2>11 · Combine the blocks: find a sensor</h2>
+  <div class="call check"><strong>Recall — before starting the combined task</strong>
+    <p>Without looking back, name the operations for listing a folder, joining a path, reading
+    a small file, and trimming text. Explain empty results versus a failed listing, and why
+    <code>IsDir()</code> is not a safe gate for real hwmon symlinks. Check only what you missed in
+    the <a href="#recipes">recipe table</a> or <a href="#list">lesson 8</a>.</p>
+  </div>
+  <p>Build discovery in two stages. First complete the scan below using your existing
+  <code>readDriverName</code> helper. Then design input descriptions from a contract, with less guidance.</p>
+  <h3>Complete — a driver-directory scan</h3>
+  <span class="label">Pseudocode exercise — fill two decisions before writing Go</span>
+<pre data-kind="exercise" data-id="driver-scan"><code>find driver directories(root, wanted driver):
+    list entries immediately inside root
+    if listing fails: return an error
+    results = empty list
+    for each entry:
+        candidate = join root and entry name
+        read candidate/name using readDriverName
+        if reading fails: skip this candidate (our chosen scan policy)
+        if _____:
+            add _____ to results
+    return results</code></pre>
+  <details><summary>Check — what is compared and what is kept?</summary><div class="answer">
+    <p>Compare the returned driver text with the wanted driver. Append the candidate directory
+    path, not its driver name or the path to its <code>name</code> file. The helper already trims text.</p>
+  </div></details>
+  <h3>Give each function a small contract</h3>
+  <span class="label">Design sketches — Go signatures only; do not paste as complete source</span>
+<pre data-kind="signature"><code>// Root is an argument so tests can supply a temporary tree.
+func findDriverDirs(root, driver string) ([]string, error)
+
+type sensor struct {
+	path  string
+	label string
+}
+
+func describeInputs(dir string) ([]sensor, error)</code></pre>
+  <p>Accept <code>root</code> instead of hardcoding <code>/sys/class/hwmon</code> inside
+  the search function. That small design decision makes the same function usable with fixtures,
+  temporary test folders, and real sysfs.</p>
+  <h3>Build — descriptions from a contract</h3>
+  <p>After <code>findDriverDirs</code> passes its checks, implement
+  <code>describeInputs(dir string) ([]sensor, error)</code> without looking at the scan example.</p>
+  <ul>
+    <li>Return one description per path from <code>listTempInputs</code>, in the same order.</li>
+    <li>Pair <code>tempN_input</code> with the optional <code>tempN_label</code> beside it;
+    trim label whitespace.</li>
+    <li>A missing label means an empty label, not a lost input. Other label-read errors
+    return an error, as does a failed input listing. Do not parse the temperature here.</li>
+  </ul>
+  <details><summary>Hint 1 — plan the composition, without Go code</summary><div class="answer">
+    <p>List inputs with the helper. For each path, derive a label path, read its text, handle
+    missing labels separately from other errors, and append a <code>sensor</code> holding the
+    original input path and label. Return the collected descriptions.</p>
+  </div></details>
+  <details><summary>Hint 2 — recognizing only a missing label</summary><div class="answer">
+    <p>Import <code>errors</code> and <code>io/fs</code>. Check
+    <code>errors.Is(err, fs.ErrNotExist)</code> rather than treating every read error as an
+    absent label. This is the error-inspection tool from lesson 10.</p>
+  </div></details>
+  <div class="tablewrap"><table>
+    <caption>Acceptance checks for the fixture tree from lesson 4</caption>
+    <thead><tr><th>Operation</th><th>Expected result</th></tr></thead>
+    <tbody>
+      <tr><td>Find driver <code>k10temp</code> under <code>fixtures</code></td><td><code>[fixtures/hwmon0]</code></td></tr>
+      <tr><td>Find driver <code>amdgpu</code></td><td><code>[fixtures/hwmon1]</code></td></tr>
+      <tr><td>Find driver <code>coretemp</code></td><td>No matches, no error</td></tr>
+      <tr><td>Describe inputs in <code>fixtures/hwmon0</code></td><td>temp1 with label Tctl; temp3 with an empty label</td></tr>
+      <tr><td>Read the discovered temp1 input</td><td>47.125 °C</td></tr>
+    </tbody>
+  </table></div>
+  <details><summary>Hint — deriving the label path</summary><div class="answer">
+    <p>For <code>fixtures/hwmon0/temp3_input</code>, remove only the trailing
+    <code>_input</code> with <code>strings.TrimSuffix</code>, then append
+    <code>"_label"</code>. Result: <code>fixtures/hwmon0/temp3_label</code>.
+    Do not replace every occurrence of “input” throughout the whole path.</p>
+  </div></details>
+  <div class="call check"><strong>Build in this order</strong>
+    <ol>
+      <li>Implement only <code>findDriverDirs</code> and print the fixture matches.</li>
+      <li>Use temporary fixtures to test matching and nonmatching drivers, two matches, no
+      matches, a missing root, and a candidate with no readable <code>name</code> file.</li>
+      <li>Implement <code>describeInputs</code>; test the optional-label behavior, empty input
+      listings, and a missing directory. A directory named <code>temp1_label</code> is a
+      deterministic label-read error on Linux: check that it is not silently ignored.</li>
+      <li>Only then try the root <code>/sys/class/hwmon</code>, read-only. Do not require
+      <code>entry.IsDir()</code> for the symlink entries.</li>
+    </ol>
+  </div>
+  <p>“Driver directory” does not yet mean “best sensor”. Several GPUs may share the driver
+  <code>amdgpu</code>; labels may describe edge, junction, or other temperatures. Listing
+  candidates and selecting one are separate responsibilities. Print what you found before
+  inventing a selection rule.</p>
+  <p>Skipping unreadable candidate names is a deliberate discovery policy, useful when entries
+  disappear during a scan. It can hide permission problems too; a later version can collect
+  warnings. Never confuse that policy with silently accepting a failed temperature read.</p>
+</section>
+
+<section id="bytes">
+  <h2>12 · Arrays, slices, and output bytes</h2>
+  <p>The other half of your project turns numbers into a binary message. You can learn the
+  mechanics without writing to a USB device.</p>
+  <h3>First, distinguish a digit from text</h3>
+  <span class="label">main.go — replace; a byte experiment, not the panel protocol</span>
+<pre data-kind="file" data-file="main.go"><code>package main
+
+import "fmt"
+
+func main() {
+	digits := [3]byte{4, 7, 1}
+	text := []byte("471")
+	fmt.Println("digit values:", digits)
+	fmt.Println("text bytes:", text)
+
+	var message [6]byte
+	n := copy(message[1:4], digits[:])
+	fmt.Println("copied:", n)
+	fmt.Println("message:", message)
+	fmt.Printf("hex: % X\n", message)
+}</code></pre>
+  <span class="label">Expected output</span>
+<pre data-kind="output"><code>digit values: [4 7 1]
+text bytes: [52 55 49]
+copied: 3
+message: [0 4 7 1 0 0]
+hex: 00 04 07 01 00 00</code></pre>
+  <ul>
+    <li><code>[3]byte</code> is an array with exactly three values. Assigning an array copies its values.</li>
+    <li><code>[]byte</code> is a slice. A slice describes a view into underlying storage.</li>
+    <li><code>message[1:4]</code> views indexes 1, 2, and 3: the upper bound is excluded.</li>
+    <li><code>digits[:]</code> views the entire digits array as a slice.</li>
+    <li><code>copy(destination, source)</code> copies as many elements as fit. It does not grow the destination.</li>
+  </ul>
+  <div class="call check"><strong>Predict before running</strong>
+    <p>Change the destination to <code>message[1:3]</code>. How many values are copied? Which
+    digit is missing? Then try <code>view := message[1:4]</code> and
+    <code>view[0] = 9</code> before printing. Which element of <code>message</code> changes?</p>
+  </div>
+  <details><summary>Check your prediction</summary><div class="answer">
+    <p>The shorter destination copies 2 values, giving <code>[0 4 7 0 0 0]</code>.
+    A view starting at index 1 changes <code>message[1]</code> when you assign to
+    <code>view[0]</code>. Slicing does not copy elements; <code>copy</code> does.</p>
+  </div></details>
+  <h3>Writing bytes: practise with an ordinary file</h3>
+  <span class="label">Fragment — add at the end of this main; also add os to its imports</span>
+<pre data-kind="fragment" data-id="write-bytes"><code>if err := os.WriteFile("practice-report.bin", message[:], 0600); err != nil {
+	fmt.Fprintln(os.Stderr, err)
+	os.Exit(1)
+}</code></pre>
+  <p>This creates or replaces <code>practice-report.bin</code> in your scratch directory.
+  You can read it back with <code>os.ReadFile</code> and print <code>% X</code> to verify the
+  bytes. A text editor may display strange symbols because these are binary values, not a text message.</p>
+  <div class="call gotcha"><strong>A hardware device is not an ordinary output file</strong>
+    <p>Do not point <code>os.WriteFile</code> at <code>/dev/hidrawN</code>. Device access has
+    its own open flags, report framing, and write rules. In this project, a leading zero
+    report-ID placeholder and the 12-byte packet form a single 13-byte write buffer.
+    Learn that separately in <a href="go.html#s5">the original guide's device-write step</a>,
+    after checking <a href="foundations.html#writerules">the two writing rules</a>.</p>
+  </div>
+  <p><strong>In your current project:</strong> your <code>Reading</code> type uses the field
+  <code>Temp</code>; the original tutorial calls it <code>Celsius</code>. Both names are fine.
+  Match the type you actually have instead of pasting a second definition or mixing field names.</p>
+</section>
+
+<section id="next">
+  <h2>13 · Use it without the guide</h2>
+  <h3>Build — a related problem, without tutorial code</h3>
+  <p>In the scratch module, write <code>readLabels(dir string) ([]string, error)</code> and
+  tests in new <code>labels.go</code> and <code>labels_test.go</code> files. It returns the
+  <em>contents</em> of label files, not their paths. Keep earlier solutions out of view;
+  standard-library documentation is allowed.</p>
+  <ul>
+    <li>Consider entries immediately inside <code>dir</code>, in filename order. Do not recurse.</li>
+    <li>Ignore directories and names that do not start with <code>temp</code> and end with
+    <code>_label</code>. As in lesson 9, the middle need not be numeric.</li>
+    <li>Read each matching file and trim surrounding whitespace. Preserve empty label strings.</li>
+    <li>An empty directory succeeds with zero results. A failed listing or matching-file read
+    returns an error, not a successful partial result.</li>
+  </ul>
+  <p>Test with <code>t.TempDir()</code>, not live sensors. Include multiple labels, an irrelevant
+  file, a directory with a matching name, empty contents, an empty directory, and a missing directory.
+  Explain why building a path is not the same operation as reading its contents.</p>
+  <details><summary>Hint — choose the operations before writing the loop</summary><div class="answer">
+    <p>Break the job into list → select names → join paths → read bytes → convert and trim →
+    collect text. You already know each operation, but the output and error policy differ
+    from collecting temperature-input paths. If you need to reopen a lesson, note which one.</p>
+  </div></details>
+  <details><summary>Check — concrete acceptance examples and likely mistakes</summary><div class="answer">
+    <p>In a temporary directory, create <code>temp1_label</code> containing <code>" Tctl\n"</code>,
+    <code>temp10_label</code> containing <code>"\n"</code>, and <code>temp2_label</code> containing
+    <code>"Edge\n"</code>. Also create an irrelevant <code>name</code> file and a directory
+    called <code>temp9_label</code>. Expect <code>[]string{"", "Tctl", "Edge"}</code>:
+    the filename order is temp10_label, temp1_label, temp2_label.</p>
+    <ul>
+      <li>Paths instead of text: you stopped after listing rather than reading.</li>
+      <li>A trailing newline: you forgot trimming after conversion.</li>
+      <li>A lost empty string: you confused empty contents with a read failure.</li>
+      <li>Wrong order: <code>ReadDir</code> sorts lexically, not by the embedded number.
+      In these names, the <code>0</code> after temp1 sorts before the underscore.</li>
+      <li>A successful empty result for a missing directory: you swallowed the listing error.</li>
+    </ul>
+    <p>On Linux, you can also create a matching-name symlink to a nonexistent file using
+    <code>os.Symlink</code>. Check the setup error; the subsequent read must return an error,
+    not silently skip the entry. No hardware or elevated permissions are needed.</p>
+  </div></details>
+  <h3 id="review">Return later — retrieve, then check</h3>
+  <p>Passing copied tests today does not show that you can use the ideas later. At the next
+  session, try the first review before rereading. Return again after a longer gap if it was
+  manageable; if not, repair the missed step and try a related task at a later session.
+  There is no prescribed “optimal” number of days.</p>
+  <ol>
+    <li><strong>Reconstruct:</strong> start a blank test file and write a small table test for
+    one helper. Explain the fields, the loop, and which implementation mistake a row would catch.</li>
+    <li><strong>Choose:</strong> without the recipe table, name the operation for building a
+    path, listing one folder, reading contents, and parsing text. Check with <code>go doc</code> afterwards.</li>
+    <li><strong>Transfer:</strong> from a blank helper file, read only files whose names end
+    in <code>.txt</code> inside one directory and return their trimmed contents. Ignore directories,
+    preserve filename order, and return errors for failed listings or matching-file reads.
+    Test empty contents and missing directories.</li>
+  </ol>
+  <details><summary>Check the review and decide what to revisit</summary><div class="answer">
+    <p>The operation choices are <code>filepath.Join</code>, <code>os.ReadDir</code>,
+    <code>os.ReadFile</code>, and a parser such as <code>strconv.Atoi</code>.
+    For the changed file task, <code>a.txt</code> containing <code>" alpha\n"</code> and
+    <code>b.txt</code> containing <code>"\n"</code> yield <code>[]string{"alpha", ""}</code>.
+    A directory named <code>c.txt</code> and a file named <code>notes.csv</code> are ignored.</p>
+    <p>Keep a short record: task → independent / hint / reopened example → mistake → what to
+    retry later. If you reopened a solution, close it and reconstruct the missed part before
+    moving on. Judge progress by correct behavior, your explanation, and a later related task—not
+    typing speed. Note frustration separately; it is useful feedback about the lesson, not a measure of ability.</p>
+  </div></details>
+  <h3>Then return to the project</h3>
+  <p>You do not need to hold the entire service in your head. Draw the data path and implement
+  one arrow at a time.</p>
+  <span class="label">Pseudocode — composition, not a complete service</span>
+<pre data-kind="pseudo"><code>startup:
+    discover candidate paths
+    choose CPU and GPU paths using explicit rules
+    print which paths were chosen
+
+one update:
+    read CPU path → temperature or error
+    read GPU path → temperature or error
+    turn successful results into valid Readings
+    turn failed results into unavailable Readings, not measured zeroes
+    build a packet from both Readings
+    print packet bytes first; add a hardware writer later
+
+later:
+    repeat one update on a timer
+    decide how to retry after device errors
+    decide how to stop and clean up</code></pre>
+  <h3>A small next task in iunit4linux</h3>
+  <ol>
+    <li>Keep your existing packet builder. Do not rewrite working code just to match a tutorial.</li>
+    <li>Implement a temperature parser and table-test text inputs without files.</li>
+    <li>Add a file-reading wrapper; test it with <code>t.TempDir()</code>.</li>
+    <li>Read one known sensor path and print its Celsius value and digit bytes.</li>
+    <li>Only then replace the known path with your discovery helper.</li>
+  </ol>
+  <p>When moving helpers from the scratch module, copy only the pieces you need and adapt names.
+  Do not copy its demonstration <code>main</code> or <code>clampDisplay</code> into the service.</p>
+  <div class="tablewrap" id="recipes"><table>
+    <caption>“I want to…” → the building block to reach for</caption>
+    <thead><tr><th>Task</th><th>Tool</th><th>Remember</th></tr></thead>
+    <tbody>
+      <tr><td>Read a small file</td><td><code>os.ReadFile</code></td><td>Returns bytes and an error</td></tr>
+      <tr><td>Keep an open file handle</td><td><code>os.Open</code></td><td>Check the error, then arrange a close</td></tr>
+      <tr><td>List one folder</td><td><code>os.ReadDir</code></td><td>Names are not full paths; no recursion</td></tr>
+      <tr><td>Build a path</td><td><code>filepath.Join</code></td><td>Does not create or check anything</td></tr>
+      <tr><td>Match a path pattern</td><td><code>filepath.Glob</code></td><td>I/O errors are ignored</td></tr>
+      <tr><td>Inspect a symlink target</td><td><code>os.Stat</code></td><td>Unlike Lstat, follows the link</td></tr>
+      <tr><td>Clean up text</td><td><code>strings.TrimSpace</code></td><td>Important for sensor-file newlines</td></tr>
+      <tr><td>Parse an integer</td><td><code>strconv.Atoi</code></td><td>Conversion to string is not parsing</td></tr>
+      <tr><td>Collect values</td><td><code>append</code></td><td>Save the returned slice</td></tr>
+      <tr><td>Test several examples</td><td>A slice of cases + a loop</td><td>Write independent expected results</td></tr>
+      <tr><td>Test file behavior</td><td><code>t.TempDir</code> + <code>os.WriteFile</code></td><td>Use controlled data, not live hardware</td></tr>
+      <tr><td>Copy bytes into a buffer</td><td><code>copy(dst, src)</code></td><td>Destination first; check the lengths</td></tr>
+    </tbody>
+  </table></div>
+  <h3>When you get stuck</h3>
+  <ul>
+    <li>Write the input and expected output on paper. If you cannot name them, shrink the task.</li>
+    <li>Print a value with <code>%q</code> for text, <code>%v</code> for general values,
+    <code>%T</code> for its type, or <code>% X</code> for bytes in hexadecimal.</li>
+    <li>Separate “could not get the data” from “got data but could not understand it”.</li>
+    <li>Ask the API directly: <code>go doc os.ReadDir</code>, <code>go doc filepath.Glob</code>,
+    or <code>go doc testing.T.Run</code>.</li>
+  </ul>
+  <p>For the rest of the project, return to <a href="go.html#s2">reading one temperature</a>
+  or <a href="go.html#s3">sensor discovery</a> in the original tutorial. Now those tasks
+  should look like combinations of operations you have already tried, not unexplained leaps.</p>
+  <p>Further references: <a href="https://go.dev/wiki/TableDrivenTests">table-driven tests</a> ·
+  <a href="https://pkg.go.dev/os">os</a> · <a href="https://pkg.go.dev/path/filepath">filepath</a> ·
+  <a href="https://pkg.go.dev/testing">testing</a>.</p>
+  <details><summary>Why this guide uses examples, attempts, feedback, and later review</summary><div class="answer">
+    <p>These are evidence-informed design choices, not proof that this particular tutorial
+    improves learning. Running supplied Go tests checks code; reconstructing and choosing
+    operations yourself is the retrieval activity. A later related task checks more than immediate copying.</p>
+    <ul>
+      <li><a href="https://doi.org/10.1177/1529100612453266">Dunlosky et al. (2013)</a> review
+      practice testing and distributed practice, among other techniques.</li>
+      <li><a href="https://doi.org/10.1007/s10648-021-09595-9">Agarwal, Nunes, and Blunt (2021)</a>
+      review retrieval practice in school and classroom research.</li>
+      <li><a href="https://doi.org/10.1080/00220970209599510">Renkl et al. (2002)</a> examine
+      gradually removing worked steps as learners move toward problem solving.</li>
+      <li><a href="https://doi.org/10.1080/08993408.2019.1608781">Sentance, Waite, and Kallia (2019)</a>
+      study the Predict–Run–Investigate–Modify–Make approach in school programming classes.</li>
+    </ul>
+    <p>Study settings differ from an adult learning Go alone. They support the direction of
+    the design, not guaranteed transfer, a universal review schedule, or a claim that this guide
+    is scientifically optimized. Your independent attempts and later review reveal what needs changing.</p>
+  </div></details>
+</section>
+</main>
+<footer>Go v2 is a companion, not a replacement for the original build guide. All runnable
+examples stay in a scratch module; discovery and service design are intentionally left as exercises.</footer>
+</div>
+</body>
+</html>
